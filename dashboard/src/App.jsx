@@ -48,6 +48,8 @@ const translations = {
     to: "Кому",
     thread: "Тема",
     replyTo: "Ответ на",
+    project: "Проект",
+    allProjects: "Все проекты",
     relatedFiles: "Связанные файлы",
     replyTargetError: "Получатель ответа должен быть Claude или Codex.",
     replyBodyError: "Текст ответа обязателен.",
@@ -97,6 +99,8 @@ const translations = {
     to: "To",
     thread: "Thread",
     replyTo: "Reply to",
+    project: "Project",
+    allProjects: "All projects",
     relatedFiles: "Related files",
     replyTargetError: "Reply target must be Claude or Codex.",
     replyBodyError: "Reply body is required.",
@@ -289,6 +293,19 @@ const styles = `
     gap: 12px;
   }
 
+  .filterControl {
+    display: grid;
+    gap: 6px;
+  }
+
+  .filterLabel {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-accent);
+  }
+
   .stat {
     min-width: 132px;
     padding: 12px 14px;
@@ -315,6 +332,7 @@ const styles = `
   }
 
   .langButton,
+  .projectSelect,
   .refreshButton {
     border: 0;
     border-radius: 999px;
@@ -334,6 +352,15 @@ const styles = `
     box-shadow: var(--button-outline-border);
   }
 
+  .projectSelect {
+    min-width: 180px;
+    padding-inline-end: 40px;
+    background: var(--surface-control);
+    color: var(--text-strong);
+    box-shadow: var(--button-outline-border);
+    cursor: pointer;
+  }
+
   .refreshButton {
     background: var(--button-primary-bg);
     color: var(--button-primary-text);
@@ -341,6 +368,7 @@ const styles = `
   }
 
   .langButton:hover,
+  .projectSelect:hover,
   .refreshButton:hover {
     transform: translateY(-1px);
   }
@@ -350,6 +378,7 @@ const styles = `
   }
 
   .langButton:disabled,
+  .projectSelect:disabled,
   .refreshButton:disabled {
     cursor: progress;
     pointer-events: none;
@@ -725,6 +754,18 @@ function getStoredValue(key, fallback, allowedValues) {
   return fallback;
 }
 
+function getStoredText(key, fallback = "") {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function getSystemPrefersDark() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
@@ -799,6 +840,9 @@ function MessageCard({
           <h3 className="filename">{message.filename}</h3>
           <div className="metaRow">
             <span className="chip">{message.status || "pending"}</span>
+            {message.project ? (
+              <span className="chip">{`${t.project}: ${message.project}`}</span>
+            ) : null}
             <span className="mono">{message.relativePath}</span>
           </div>
         </div>
@@ -918,9 +962,11 @@ export default function App() {
   const [replyTargetPath, setReplyTargetPath] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [activeAction, setActiveAction] = useState("");
+  const [availableProjects, setAvailableProjects] = useState([]);
   const [lang, setLang] = useState(() =>
     getStoredValue("mailbox-lang", "ru", supportedLanguages)
   );
+  const [project, setProject] = useState(() => getStoredText("mailbox-project", ""));
   const [theme, setTheme] = useState(() =>
     getStoredValue("mailbox-theme", "auto", supportedThemes)
   );
@@ -938,6 +984,12 @@ export default function App() {
       window.localStorage.setItem("mailbox-lang", lang);
     } catch {}
   }, [lang]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("mailbox-project", project);
+    } catch {}
+  }, [project]);
 
   useEffect(() => {
     try {
@@ -986,7 +1038,12 @@ export default function App() {
       }
 
       try {
-        const nextMessages = await fetchMessages(signal);
+        const nextMessages = await fetchMessages(signal, project);
+        const nextProjects = Array.isArray(nextMessages.projects)
+          ? nextMessages.projects.filter(
+              (value) => typeof value === "string" && value.trim().length > 0
+            )
+          : [];
         setMessages({
           toClaude: Array.isArray(nextMessages.toClaude)
             ? nextMessages.toClaude
@@ -996,6 +1053,12 @@ export default function App() {
             : [],
           archive: Array.isArray(nextMessages.archive) ? nextMessages.archive : []
         });
+        setAvailableProjects(nextProjects);
+        setProject((currentProject) =>
+          currentProject && !nextProjects.includes(currentProject)
+            ? ""
+            : currentProject
+        );
         setError("");
         setLastUpdated(new Date().toISOString());
       } catch (loadError) {
@@ -1025,7 +1088,7 @@ export default function App() {
       controller.abort();
       window.clearInterval(intervalId);
     };
-  }, [refreshMessages]);
+  }, [project, refreshMessages]);
 
   const openReply = useEffectEvent((message) => {
     setError("");
@@ -1066,6 +1129,7 @@ export default function App() {
       await postReply({
         to: target,
         thread: message.thread,
+        project: message.project,
         body: trimmedBody,
         replyTo:
           typeof message.metadata?.id === "string" ? message.metadata.id : undefined
@@ -1143,6 +1207,24 @@ export default function App() {
               </div>
 
               <div className="toolbarControls">
+                <label className="filterControl">
+                  <span className="filterLabel">{t.project}</span>
+                  <select
+                    className="projectSelect"
+                    onChange={(event) => {
+                      setProject(event.target.value);
+                    }}
+                    value={project}
+                  >
+                    <option value="">{t.allProjects}</option>
+                    {availableProjects.map((projectOption) => (
+                      <option key={projectOption} value={projectOption}>
+                        {projectOption}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <button
                   aria-label={t.languageSwitchLabel}
                   className="langButton"

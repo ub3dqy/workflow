@@ -133,6 +133,7 @@ async function readMessageSummary(rootDirectory, bucketName, filename) {
     bucketName,
     filename,
     thread: typeof data.thread === "string" && data.thread ? data.thread : "unknown-thread",
+    project: typeof data.project === "string" ? data.project : "",
     from: typeof data.from === "string" && data.from ? data.from : "unknown",
     created: typeof data.created === "string" && data.created ? data.created : "unknown-time",
     preview: firstBodyLine(body)
@@ -152,8 +153,11 @@ function buildSummary({ toClaudeFiles, toCodexFiles, previews }) {
 
     for (const preview of previews) {
       const bucketLabel = preview.bucketName === "to-claude" ? "Claude inbox" : "Codex inbox";
+      const contextLabel = preview.project
+        ? `${bucketLabel}, ${preview.project}`
+        : bucketLabel;
       lines.push(
-        `- [${preview.thread}] from ${preview.from}, ${preview.created} (${bucketLabel}) — ${preview.preview}`
+        `- [${preview.thread}] from ${preview.from}, ${preview.created} (${contextLabel}) — ${preview.preview}`
       );
     }
   }

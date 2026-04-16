@@ -1,18 +1,21 @@
 import express from "express";
 import {
+  collectProjectValues,
   archiveMessageFile,
   ClientError,
   defaultMailboxRoot,
+  filterMessagesByProject,
+  generateMessageFile,
   host,
   isKnownBucket,
+  normalizeProject,
   port,
   readBucket,
   sanitizeString,
   validateRelativeInboxPath,
   validateReplyTarget,
   validateResolution,
-  validateThread,
-  generateMessageFile
+  validateThread
 } from "../scripts/mailbox-lib.mjs";
 
 const mailboxRoot = defaultMailboxRoot;
@@ -35,15 +38,24 @@ function sendClientError(response, error) {
   return false;
 }
 
-app.get("/api/messages", async (_request, response) => {
+app.get("/api/messages", async (request, response) => {
   try {
-    const [toClaude, toCodex, archive] = await Promise.all([
+    const requestedProject = normalizeProject(request.query.project);
+    const [allToClaude, allToCodex, allArchive] = await Promise.all([
       readBucket("to-claude", mailboxRoot),
       readBucket("to-codex", mailboxRoot),
       readBucket("archive", mailboxRoot)
     ]);
+    const projects = collectProjectValues([
+      ...allToClaude,
+      ...allToCodex,
+      ...allArchive
+    ]);
+    const toClaude = filterMessagesByProject(allToClaude, requestedProject);
+    const toCodex = filterMessagesByProject(allToCodex, requestedProject);
+    const archive = filterMessagesByProject(allArchive, requestedProject);
 
-    response.json({ toClaude, toCodex, archive });
+    response.json({ toClaude, toCodex, archive, projects });
   } catch (error) {
     response.status(500).json({
       error: "Failed to read mailbox",
@@ -61,7 +73,11 @@ app.get("/api/messages/:dir", async (request, response) => {
   }
 
   try {
-    const messages = await readBucket(bucketName, mailboxRoot);
+    const requestedProject = normalizeProject(request.query.project);
+    const messages = filterMessagesByProject(
+      await readBucket(bucketName, mailboxRoot),
+      requestedProject
+    );
     response.json({ messages });
   } catch (error) {
     response.status(500).json({
@@ -75,6 +91,7 @@ app.post("/api/reply", async (request, response) => {
   try {
     const to = validateReplyTarget(request.body?.to);
     const thread = validateThread(request.body?.thread);
+    const project = normalizeProject(request.body?.project);
     const body = sanitizeString(request.body?.body);
     const replyTo = sanitizeString(request.body?.reply_to);
 
@@ -85,6 +102,7 @@ app.post("/api/reply", async (request, response) => {
     const created = await generateMessageFile({
       to,
       thread,
+      project,
       body,
       replyTo,
       mailboxRoot

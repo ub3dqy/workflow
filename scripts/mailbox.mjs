@@ -6,8 +6,10 @@ import {
   collectMailboxMessages,
   ClientError,
   defaultMailboxRoot,
+  filterMessagesByProject,
   generateMessageFile,
   getReplyTargetForMessage,
+  normalizeProject,
   normalizePath,
   readMessageByRelativePath,
   recoverOrphans,
@@ -74,7 +76,16 @@ function formatTable(messages) {
     return "No messages.";
   }
 
-  const headers = ["bucket", "thread", "from", "to", "status", "created", "relativePath"];
+  const headers = [
+    "bucket",
+    "project",
+    "thread",
+    "from",
+    "to",
+    "status",
+    "created",
+    "relativePath"
+  ];
   const rows = messages.map((message) => headers.map((header) => String(message[header] ?? "")));
   const widths = headers.map((header, index) => {
     return Math.max(
@@ -91,8 +102,8 @@ function formatTable(messages) {
 function usageText() {
   return [
     "Usage:",
-    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
-    "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] [--json]",
+    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> [--project <name>] (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
+    "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] [--project <name>] [--json]",
     "  node scripts/mailbox.mjs reply --to <relativePath> (--body <text> | --file <path>) [--from <user|claude|codex>]",
     "  node scripts/mailbox.mjs archive --path <relativePath> [--resolution <answered|no-reply-needed|superseded>]",
     "  node scripts/mailbox.mjs recover"
@@ -104,6 +115,7 @@ async function handleSend(args) {
     from: { type: "string" },
     to: { type: "string" },
     thread: { type: "string" },
+    project: { type: "string" },
     body: { type: "string" },
     file: { type: "string" },
     "reply-to": { type: "string" },
@@ -112,6 +124,7 @@ async function handleSend(args) {
   });
   const from = validateSender(options.from);
   const thread = validateThread(options.thread);
+  const project = normalizeProject(options.project);
   const body = await readBody(options);
   const messages = await collectMailboxMessages(mailboxRoot);
 
@@ -123,6 +136,7 @@ async function handleSend(args) {
     from,
     to: options.to,
     thread,
+    project,
     body,
     replyTo: options["reply-to"],
     mailboxRoot,
@@ -140,16 +154,23 @@ async function handleSend(args) {
 async function handleList(args) {
   const options = parseOptions(args, {
     bucket: { type: "string" },
+    project: { type: "string" },
     json: { type: "boolean" }
   });
   const bucket = sanitizeString(options.bucket) || "all";
+  const project = normalizeProject(options.project);
   const messages = await collectMailboxMessages(mailboxRoot);
-  const filtered =
+  const filteredByBucket =
     bucket === "all"
       ? messages
       : messages.filter((message) => message.bucket === bucket);
+  const filtered = filterMessagesByProject(filteredByBucket, project);
 
-  if (bucket !== "all" && filtered.length === 0 && !["to-claude", "to-codex", "archive"].includes(bucket)) {
+  if (
+    bucket !== "all" &&
+    filteredByBucket.length === 0 &&
+    !["to-claude", "to-codex", "archive"].includes(bucket)
+  ) {
     throw new ClientError(
       64,
       'bucket must be "to-claude", "to-codex", "archive", or "all"'
@@ -181,6 +202,7 @@ async function handleReply(args) {
     from,
     to,
     thread: targetMessage.thread,
+    project: targetMessage.project,
     body,
     replyTo: targetMessage.id,
     mailboxRoot,

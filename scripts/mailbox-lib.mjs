@@ -56,6 +56,10 @@ export function sanitizeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function normalizeProject(project) {
+  return sanitizeString(project);
+}
+
 export function toSortValue(created) {
   if (typeof created !== "string" || created.length === 0) {
     return 0;
@@ -89,6 +93,32 @@ export function extractSeq(value, from) {
   const escapedFrom = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = value.match(new RegExp(`-${escapedFrom}-(\\d+)$`));
   return match ? Number(match[1]) : 0;
+}
+
+export function filterMessagesByProject(messages, project = "") {
+  const nextProject = normalizeProject(project);
+
+  if (!nextProject) {
+    return messages;
+  }
+
+  return messages.filter(
+    (message) => normalizeProject(message.project) === nextProject
+  );
+}
+
+export function collectProjectValues(messages) {
+  const projects = new Set();
+
+  for (const message of messages) {
+    const project = normalizeProject(message.project);
+
+    if (project) {
+      projects.add(project);
+    }
+  }
+
+  return [...projects].sort((left, right) => left.localeCompare(right));
 }
 
 export function validateThread(thread) {
@@ -255,6 +285,10 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
     from: typeof parsed.data.from === "string" ? parsed.data.from : "",
     to: typeof parsed.data.to === "string" ? parsed.data.to : "",
     thread: typeof parsed.data.thread === "string" ? parsed.data.thread : "",
+    project:
+      typeof parsed.data.project === "string"
+        ? normalizeProject(parsed.data.project)
+        : "",
     status: typeof parsed.data.status === "string" ? parsed.data.status : "pending",
     created,
     reply_to: typeof parsed.data.reply_to === "string" ? parsed.data.reply_to : "",
@@ -343,6 +377,7 @@ export async function generateMessageFile({
   to,
   from = "user",
   thread,
+  project = "",
   body,
   replyTo = "",
   mailboxRoot,
@@ -351,6 +386,7 @@ export async function generateMessageFile({
   const nextTarget = validateReplyTarget(to);
   const nextFrom = validateSender(from);
   const nextThread = validateThread(thread);
+  const nextProject = normalizeProject(project);
   const nextBody = typeof body === "string" ? body.trim() : "";
   const nextReplyTo = sanitizeString(replyTo);
 
@@ -384,6 +420,10 @@ export async function generateMessageFile({
     data.reply_to = nextReplyTo;
   }
 
+  if (nextProject) {
+    data.project = nextProject;
+  }
+
   await fs.mkdir(targetDirPath, { recursive: true });
   await fs.writeFile(filePath, matter.stringify(nextBody, data), "utf8");
 
@@ -393,7 +433,8 @@ export async function generateMessageFile({
     relativePath: normalizePath(path.relative(mailboxRoot, filePath)),
     to: nextTarget,
     from: nextFrom,
-    thread: nextThread
+    thread: nextThread,
+    project: nextProject
   };
 }
 
