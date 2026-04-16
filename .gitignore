@@ -1,0 +1,13 @@
+# Mailbox is local working memory, not a project artifact.
+agent-mailbox/
+
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Build output
+dashboard/dist/
+
+# OS
+.DS_Store
+Thumbs.db
