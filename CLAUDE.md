@@ -22,7 +22,7 @@
 │   └── archive/
 ├── dashboard/                         # Local read-only web UI for mailbox
 │   ├── package.json
-│   ├── server.js                      # Express API (127.0.0.1:3001)
+│   ├── server.js                      # Express API (127.0.0.1:3003)
 │   ├── vite.config.js                 # Vite dev server (127.0.0.1:9119)
 │   └── src/
 │       ├── main.jsx
@@ -69,7 +69,7 @@
 - `dashboard/` — local read-only web UI for mailbox
 - Start: `cd dashboard && npm run dev`
 - App UI: `http://127.0.0.1:9119/`
-- API server: `http://127.0.0.1:3001/`
+- API server: `http://127.0.0.1:3003/`
 - Production build is not needed. This is a local-only tool.
 
 ## CI

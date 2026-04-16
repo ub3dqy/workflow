@@ -810,25 +810,39 @@ const styles = `
     }
 
     .controlsGroup {
-      width: 100%;
+      flex: 1 1 100%;
       gap: 10px;
-    }
-
-    .buttonCluster {
-      width: 100%;
-      justify-content: space-between;
+      align-items: flex-end;
     }
 
     .filterControl {
-      width: 100%;
+      flex: 1 1 180px;
+      min-width: 0;
     }
 
     .projectSelect {
       width: 100%;
     }
 
+    .buttonCluster {
+      flex: 0 0 auto;
+      justify-content: flex-end;
+    }
+
     .statsGroup {
       flex: 1;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .controlsGroup {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .buttonCluster {
+      width: 100%;
+      justify-content: space-between;
     }
   }
 `;
@@ -938,7 +952,9 @@ function MessageCard({
           <h3 className="threadTitle">{message.thread || "—"}</h3>
           <div className="cardTags">
             {isArchived ? (
-              <span className="chip">{message.status || "archived"}</span>
+              <span className="chip">
+                {message.resolution || message.status || "archived"}
+              </span>
             ) : null}
             {message.project ? (
               <span className="chip chipProject">{message.project}</span>

@@ -10,7 +10,7 @@ const matter = requireFromDashboard("gray-matter");
 const { marked } = requireFromDashboard("marked");
 
 export const host = "127.0.0.1";
-export const port = 3001;
+export const port = 3003;
 export const knownBuckets = ["to-claude", "to-codex", "archive"];
 export const bucketConfig = {
   "to-claude": { key: "toClaude", recursive: false },
@@ -290,6 +290,8 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
         ? normalizeProject(parsed.data.project)
         : "",
     status: typeof parsed.data.status === "string" ? parsed.data.status : "pending",
+    resolution:
+      typeof parsed.data.resolution === "string" ? parsed.data.resolution : "",
     created,
     reply_to: typeof parsed.data.reply_to === "string" ? parsed.data.reply_to : "",
     answer_message_id:
