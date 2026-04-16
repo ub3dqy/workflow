@@ -271,7 +271,7 @@ export default defineConfig({
 | V7 | API returns empty array | `curl -s http://127.0.0.1:3001/api/messages` | `{"toClaude":[],"toCodex":[],"archive":[]}` or similar |
 | V8 | vite builds without errors | `cd dashboard && npx vite build` | exit code 0 |
 | V9 | gitignore works | `git status --short \| grep agent-mailbox` | no output (ignored) |
-| V10 | no personal data | `grep -ri "<user>\|<hostname>\|<handle>" . --include="*.js" --include="*.jsx" --include="*.json" --include="*.md" -l` | no matches in new files |
+| V10 | no personal data | `grep -ri "<personal-data-patterns>" . --include="*.js" --include="*.jsx" --include="*.json" --include="*.md" -l` | no matches in new files |
 
 ### Phase 2 — `[awaits user]`
 

@@ -97,7 +97,7 @@
 | Codex | Claude написал `--select I` acceptance "diff пустой" в грязном worktree | Pre-flight discrepancy |
 | Claude | Codex'овский `ruff --fix` создал 3 новых E402 violation'а | Independent review + `ruff check` |
 | Claude | Codex'овский `uv sync --no-dev` + `uv run` реверсировал no-dev | Smoke re-run |
-| Claude | Codex'овский отчёт содержал hostname `<hostname>` в captured output | Personal data scan |
+| Claude | Codex'овский отчёт содержал реальный hostname в captured output | Personal data scan |
 | Codex | CI gate важнее pre-commit (план предлагал наоборот) | Argumentative design feedback |
 | Codex | I → UP → B поэтапно лучше чем все сразу | Argumentative design feedback |
 
