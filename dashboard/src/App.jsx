@@ -12,9 +12,8 @@ const supportedThemes = new Set(["light", "dark", "auto"]);
 const translations = {
   ru: {
     eyebrow: "Локальный дашборд mailbox",
-    heading: "Просмотр и управление файловым протоколом.",
-    subhead:
-      "Файлы остаются источником правды. Дашборд читает, отвечает и архивирует сообщения через локальный API с обновлением каждые три секунды.",
+    heading: "Mailbox",
+    subhead: "Сообщения между Claude и Codex.",
     messages: "Сообщения",
     lastSync: "Обновлено",
     waitingForLoad: "Ожидание загрузки",
@@ -26,6 +25,7 @@ const translations = {
     emptyPollingHint: "Дашборд подхватит его на следующем цикле обновления.",
     emptyFrontmatterHint:
       "Frontmatter должен быть лёгким: отправитель, получатель, thread slug, UTC timestamp и опционально related files.",
+    showExample: "Показать пример frontmatter",
     toClaude: "Для Claude",
     toCodex: "Для Codex",
     archive: "Архив",
@@ -62,9 +62,8 @@ const translations = {
   },
   en: {
     eyebrow: "Local mailbox dashboard",
-    heading: "View and manage the file-based protocol.",
-    subhead:
-      "Files remain the source of truth. This dashboard can view, reply to, and archive mailbox messages through the local API while polling every three seconds.",
+    heading: "Mailbox",
+    subhead: "Messages between Claude and Codex.",
     messages: "Messages",
     lastSync: "Last sync",
     waitingForLoad: "Waiting for first load",
@@ -77,6 +76,7 @@ const translations = {
       "The dashboard will pick it up on the next polling cycle.",
     emptyFrontmatterHint:
       "Frontmatter should stay lightweight: sender, recipient, thread slug, UTC timestamp, and optional related files.",
+    showExample: "Show frontmatter example",
     toClaude: "To Claude",
     toCodex: "To Codex",
     archive: "Archive",
@@ -169,11 +169,11 @@ const styles = `
     --bg-radial: #2d241c;
     --bg-linear-start: #1a1a1a;
     --bg-linear-end: #242424;
-    --text-primary: #e8e0d4;
-    --text-strong: #f1eadf;
-    --text-secondary: #c8b89a;
-    --text-muted: #a99885;
-    --text-accent: #d3bc95;
+    --text-primary: #f0e8db;
+    --text-strong: #faf4ea;
+    --text-secondary: #d6c4a8;
+    --text-muted: #b9a892;
+    --text-accent: #e4cfa8;
     --text-error: #ffd5cc;
     --surface-stat: rgba(40, 36, 30, 0.82);
     --surface-column: rgba(36, 32, 28, 0.88);
@@ -185,12 +185,12 @@ const styles = `
     --surface-code: #0d0d0d;
     --surface-textarea: #24211d;
     --surface-control: rgba(40, 36, 30, 0.92);
-    --surface-control-active: #8c4f2a;
+    --surface-control-active: #4a6f66;
     --surface-error: rgba(110, 44, 34, 0.9);
-    --border-soft: rgba(200, 180, 150, 0.12);
-    --border-subtle: rgba(200, 180, 150, 0.1);
-    --border-strong: rgba(200, 180, 150, 0.18);
-    --border-dashed: rgba(200, 180, 150, 0.22);
+    --border-soft: rgba(210, 190, 155, 0.22);
+    --border-subtle: rgba(210, 190, 155, 0.18);
+    --border-strong: rgba(210, 190, 155, 0.28);
+    --border-dashed: rgba(210, 190, 155, 0.32);
     --border-error: rgba(255, 191, 174, 0.2);
     --chip-text: #c8b89a;
     --path-text: #d8c7b0;
@@ -265,9 +265,9 @@ const styles = `
 
   h1 {
     margin: 0;
-    font-size: clamp(32px, 5vw, 54px);
-    line-height: 0.95;
-    letter-spacing: -0.04em;
+    font-size: clamp(28px, 3.2vw, 38px);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
   }
 
   .subhead {
@@ -282,15 +282,27 @@ const styles = `
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
+    gap: 16px;
   }
 
-  .toolbarControls {
+  .statsGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .controlsGroup {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: flex-end;
     gap: 12px;
+  }
+
+  .buttonCluster {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
   }
 
   .filterControl {
@@ -431,23 +443,48 @@ const styles = `
   }
 
   .emptyState {
-    padding: 32px;
+    padding: 24px 28px;
     border: 1px dashed var(--border-dashed);
-    border-radius: 24px;
+    border-radius: 20px;
     background: var(--surface-empty);
     box-shadow: var(--shadow-inset);
   }
 
   .emptyState h2 {
-    margin: 0 0 10px;
-    font-size: 24px;
+    margin: 0 0 6px;
+    font-size: 20px;
   }
 
-  .emptyState p {
-    margin: 0 0 10px;
+  .emptyHintLine {
+    margin: 0;
     max-width: 760px;
-    line-height: 1.6;
+    line-height: 1.55;
     color: var(--text-secondary);
+  }
+
+  .emptyDetails {
+    margin-top: 14px;
+  }
+
+  .emptySummary {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--surface-chip);
+    color: var(--chip-text);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .emptyFrontmatterHint {
+    margin: 10px 0 0;
+    max-width: 760px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    font-size: 13px;
   }
 
   .codeBlock {
@@ -526,30 +563,43 @@ const styles = `
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
-  .filename {
+  .cardHeading {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .threadTitle {
     margin: 0 0 6px;
-    font-size: 16px;
-    line-height: 1.2;
+    font-size: 17px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    word-break: break-word;
   }
 
-  .metaRow {
+  .cardTags {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
   }
 
   .chip {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    padding: 4px 10px;
+    padding: 3px 10px;
     background: var(--surface-chip);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.02em;
     color: var(--chip-text);
+  }
+
+  .chipProject {
+    background: var(--surface-control-active);
+    color: var(--button-primary-text);
   }
 
   .mono {
@@ -565,22 +615,37 @@ const styles = `
     color: var(--text-muted);
   }
 
-  .details {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 6px 10px;
-    margin: 0;
-  }
-
-  .details dt {
-    font-weight: 700;
-    color: var(--chip-text);
-  }
-
-  .details dd {
-    margin: 0;
+  .cardMeta {
+    margin: 0 0 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
     color: var(--text-strong);
-    word-break: break-word;
+  }
+
+  .metaPart {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .metaFrom,
+  .metaTo {
+    font-weight: 600;
+  }
+
+  .metaArrow {
+    color: var(--text-muted);
+  }
+
+  .metaSep {
+    color: var(--text-muted);
+  }
+
+  .cardFilename {
+    margin: 0;
   }
 
   .relatedFiles {
@@ -639,7 +704,8 @@ const styles = `
   .cardButton {
     border: 0;
     border-radius: 999px;
-    padding: 10px 14px;
+    padding: 9px 16px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     transition: transform 140ms ease, opacity 140ms ease, box-shadow 140ms ease;
@@ -656,16 +722,26 @@ const styles = `
     box-shadow: none;
   }
 
-  .replyButton {
+  .cardButton--primary,
+  .replyButton,
+  .sendButton {
     background: var(--button-primary-bg);
     color: var(--button-primary-text);
     box-shadow: var(--button-reply-shadow);
   }
 
+  .cardButton--secondary,
   .archiveButton {
     background: var(--button-archive-bg);
     color: var(--button-archive-text);
     box-shadow: var(--button-archive-border);
+  }
+
+  .cardButton--ghost,
+  .cancelButton {
+    background: transparent;
+    color: var(--button-outline-text);
+    box-shadow: var(--button-outline-border);
   }
 
   .replyForm {
@@ -714,25 +790,45 @@ const styles = `
     gap: 10px;
   }
 
-  .sendButton {
-    background: var(--button-send-bg);
-    color: var(--button-send-text);
-    box-shadow: var(--button-send-shadow);
-  }
+  /* sendButton / cancelButton styles moved to .cardButton--primary / --ghost aliases */
 
-  .cancelButton {
-    background: transparent;
-    color: var(--button-outline-text);
-    box-shadow: var(--button-outline-border);
-  }
-
-  @media (max-width: 1120px) {
+  @media (max-width: 1280px) {
     .grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .hero {
+      flex-direction: column;
+      align-items: stretch;
     }
 
     .toolbar {
       justify-content: flex-start;
+      gap: 12px;
+    }
+
+    .controlsGroup {
+      width: 100%;
+      gap: 10px;
+    }
+
+    .buttonCluster {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .filterControl {
+      width: 100%;
+    }
+
+    .projectSelect {
+      width: 100%;
+    }
+
+    .statsGroup {
+      flex: 1;
     }
   }
 `;
@@ -833,32 +929,42 @@ function MessageCard({
   const disableArchive = Boolean(activeAction);
   const disableReply = Boolean(activeAction) || !replyTarget;
 
+  const isArchived = !showActions;
+
   return (
     <article className="card">
       <header className="cardHeader">
-        <div>
-          <h3 className="filename">{message.filename}</h3>
-          <div className="metaRow">
-            <span className="chip">{message.status || "pending"}</span>
-            {message.project ? (
-              <span className="chip">{`${t.project}: ${message.project}`}</span>
+        <div className="cardHeading">
+          <h3 className="threadTitle">{message.thread || "—"}</h3>
+          <div className="cardTags">
+            {isArchived ? (
+              <span className="chip">{message.status || "archived"}</span>
             ) : null}
-            <span className="mono">{message.relativePath}</span>
+            {message.project ? (
+              <span className="chip chipProject">{message.project}</span>
+            ) : null}
           </div>
         </div>
         <div className="timestamp">{formatTimestamp(message.created, lang, t)}</div>
       </header>
 
-      <dl className="details">
-        <dt>{t.from}</dt>
-        <dd>{message.from || "—"}</dd>
-        <dt>{t.to}</dt>
-        <dd>{message.to || "—"}</dd>
-        <dt>{t.thread}</dt>
-        <dd>{message.thread || "—"}</dd>
-        <dt>{t.replyTo}</dt>
-        <dd>{message.reply_to || "—"}</dd>
-      </dl>
+      <p className="cardMeta">
+        <span className="metaPart">
+          <span className="metaFrom">{message.from || "?"}</span>
+          <span className="metaArrow">→</span>
+          <span className="metaTo">{message.to || "?"}</span>
+        </span>
+        {message.reply_to ? (
+          <>
+            <span className="metaSep">·</span>
+            <span className="metaPart mono">
+              {t.replyTo}: {message.reply_to}
+            </span>
+          </>
+        ) : null}
+      </p>
+
+      <p className="cardFilename mono">{message.relativePath}</p>
 
       {message.related_files.length > 0 ? (
         <div className="relatedFiles">
@@ -884,7 +990,7 @@ function MessageCard({
         <>
           <div className="actionRow">
             <button
-              className="cardButton replyButton"
+              className="cardButton cardButton--primary"
               disabled={disableReply}
               onClick={() => {
                 onOpenReply(message);
@@ -894,7 +1000,7 @@ function MessageCard({
               {isReplying ? t.replying : t.reply}
             </button>
             <button
-              className="cardButton archiveButton"
+              className="cardButton cardButton--secondary"
               disabled={disableArchive}
               onClick={() => {
                 onArchive(message);
@@ -930,14 +1036,14 @@ function MessageCard({
               </p>
               <div className="replyActions">
                 <button
-                  className="cardButton sendButton"
+                  className="cardButton cardButton--primary"
                   disabled={Boolean(activeAction)}
                   type="submit"
                 >
                   {isReplying ? t.sending : t.sendReply}
                 </button>
                 <button
-                  className="cardButton cancelButton"
+                  className="cardButton cardButton--ghost"
                   disabled={Boolean(activeAction)}
                   onClick={onCancelReply}
                   type="button"
@@ -1193,20 +1299,22 @@ export default function App() {
             </div>
 
             <div className="toolbar">
-              <div className="stat">
-                <span className="statLabel">{t.messages}</span>
-                <span className="statValue">{totalMessages}</span>
-              </div>
-              <div className="stat">
-                <span className="statLabel">{t.lastSync}</span>
-                <span className="statValue">
-                  {lastUpdated
-                    ? formatTimestamp(lastUpdated, lang, t)
-                    : t.waitingForLoad}
-                </span>
+              <div className="statsGroup">
+                <div className="stat">
+                  <span className="statLabel">{t.messages}</span>
+                  <span className="statValue">{totalMessages}</span>
+                </div>
+                <div className="stat">
+                  <span className="statLabel">{t.lastSync}</span>
+                  <span className="statValue">
+                    {lastUpdated
+                      ? formatTimestamp(lastUpdated, lang, t)
+                      : t.waitingForLoad}
+                  </span>
+                </div>
               </div>
 
-              <div className="toolbarControls">
+              <div className="controlsGroup">
                 <label className="filterControl">
                   <span className="filterLabel">{t.project}</span>
                   <select
@@ -1225,54 +1333,56 @@ export default function App() {
                   </select>
                 </label>
 
-                <button
-                  aria-label={t.languageSwitchLabel}
-                  className="langButton"
-                  onClick={() => {
-                    toggleLanguage();
-                  }}
-                  type="button"
-                >
-                  {t.langSwitch}
-                </button>
+                <div className="buttonCluster">
+                  <button
+                    aria-label={t.languageSwitchLabel}
+                    className="langButton"
+                    onClick={() => {
+                      toggleLanguage();
+                    }}
+                    type="button"
+                  >
+                    {t.langSwitch}
+                  </button>
 
-                <div
-                  aria-label={t.themeGroupLabel}
-                  className="segmentedControl"
-                  role="group"
-                >
-                  {[
-                    { value: "light", label: t.themeLight },
-                    { value: "dark", label: t.themeDark },
-                    { value: "auto", label: t.themeAuto }
-                  ].map((option) => (
-                    <button
-                      aria-pressed={theme === option.value}
-                      className={`segmentButton${
-                        theme === option.value ? " segmentButtonActive" : ""
-                      }`}
-                      key={option.value}
-                      onClick={() => {
-                        setTheme(option.value);
-                      }}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                  <div
+                    aria-label={t.themeGroupLabel}
+                    className="segmentedControl"
+                    role="group"
+                  >
+                    {[
+                      { value: "light", label: t.themeLight },
+                      { value: "dark", label: t.themeDark },
+                      { value: "auto", label: t.themeAuto }
+                    ].map((option) => (
+                      <button
+                        aria-pressed={theme === option.value}
+                        className={`segmentButton${
+                          theme === option.value ? " segmentButtonActive" : ""
+                        }`}
+                        key={option.value}
+                        onClick={() => {
+                          setTheme(option.value);
+                        }}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    aria-busy={isRefreshing}
+                    className="refreshButton"
+                    disabled={isRefreshing}
+                    onClick={() => {
+                      void refreshMessages();
+                    }}
+                    type="button"
+                  >
+                    {t.refreshNow}
+                  </button>
                 </div>
-
-                <button
-                  aria-busy={isRefreshing}
-                  className="refreshButton"
-                  disabled={isRefreshing}
-                  onClick={() => {
-                    void refreshMessages();
-                  }}
-                  type="button"
-                >
-                  {t.refreshNow}
-                </button>
               </div>
             </div>
           </section>
@@ -1286,13 +1396,15 @@ export default function App() {
           {isEmpty && !isLoading ? (
             <section className="emptyState">
               <h2>{t.mailboxEmpty}</h2>
-              <p>
+              <p className="emptyHintLine">
                 {t.emptyHint}
                 <code> agent-mailbox/to-claude/</code> {t.emptyHintOr}
-                <code> agent-mailbox/to-codex/</code>. {t.emptyPollingHint}
+                <code> agent-mailbox/to-codex/</code>.
               </p>
-              <p>{t.emptyFrontmatterHint}</p>
-              <pre className="codeBlock">{`---
+              <details className="emptyDetails">
+                <summary className="emptySummary">{t.showExample}</summary>
+                <p className="emptyFrontmatterHint">{t.emptyFrontmatterHint}</p>
+                <pre className="codeBlock">{`---
 from: claude
 to: codex
 thread: example-thread
@@ -1301,6 +1413,7 @@ created: 2026-04-16T08:00:00Z
 ---
 
 What should happen next?`}</pre>
+              </details>
             </section>
           ) : null}
 
