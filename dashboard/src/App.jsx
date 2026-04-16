@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import { fetchMessages } from "./api.js";
+import { archiveMessage, fetchMessages, postReply } from "./api.js";
 
 const pollIntervalMs = 3000;
 const emptyData = {
@@ -344,6 +344,103 @@ const styles = `
     margin-bottom: 0;
   }
 
+  .actionRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .cardButton {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 140ms ease, opacity 140ms ease, box-shadow 140ms ease;
+  }
+
+  .cardButton:hover {
+    transform: translateY(-1px);
+  }
+
+  .cardButton:disabled {
+    cursor: progress;
+    opacity: 0.7;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .replyButton {
+    background: #2f5a51;
+    color: #f6f1e7;
+    box-shadow: 0 12px 24px rgba(26, 49, 44, 0.16);
+  }
+
+  .archiveButton {
+    background: #e8ded0;
+    color: #46392b;
+    box-shadow: inset 0 0 0 1px rgba(61, 45, 25, 0.08);
+  }
+
+  .replyForm {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(61, 45, 25, 0.1);
+  }
+
+  .replyLabel {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7a5d39;
+  }
+
+  .replyTextarea {
+    min-height: 132px;
+    width: 100%;
+    resize: vertical;
+    border: 1px solid rgba(61, 45, 25, 0.18);
+    border-radius: 16px;
+    padding: 12px 14px;
+    background: #fffdfa;
+    color: #2a241d;
+    font: inherit;
+    line-height: 1.5;
+  }
+
+  .replyTextarea:focus {
+    outline: 2px solid rgba(47, 90, 81, 0.2);
+    outline-offset: 2px;
+  }
+
+  .replyHint {
+    margin: 0;
+    color: #6f6152;
+    line-height: 1.5;
+  }
+
+  .replyActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .sendButton {
+    background: #8c4f2a;
+    color: #fff6eb;
+    box-shadow: 0 12px 24px rgba(91, 51, 26, 0.14);
+  }
+
+  .cancelButton {
+    background: transparent;
+    color: #5e4c37;
+    box-shadow: inset 0 0 0 1px rgba(61, 45, 25, 0.14);
+  }
+
   @media (max-width: 1120px) {
     .grid {
       grid-template-columns: 1fr;
@@ -368,7 +465,36 @@ function formatTimestamp(value) {
   }).format(new Date(parsed));
 }
 
-function MessageCard({ message }) {
+function getReplyTarget(message) {
+  if (message.from === "claude" || message.from === "codex") {
+    return message.from;
+  }
+
+  if (message.to === "claude" || message.to === "codex") {
+    return message.to;
+  }
+
+  return "";
+}
+
+function MessageCard({
+  message,
+  showActions,
+  isReplyOpen,
+  replyBody,
+  activeAction,
+  onOpenReply,
+  onReplyBodyChange,
+  onCancelReply,
+  onSendReply,
+  onArchive
+}) {
+  const replyTarget = getReplyTarget(message);
+  const isReplying = activeAction === `reply:${message.relativePath}`;
+  const isArchiving = activeAction === `archive:${message.relativePath}`;
+  const disableArchive = Boolean(activeAction);
+  const disableReply = Boolean(activeAction) || !replyTarget;
+
   return (
     <article className="card">
       <header className="cardHeader">
@@ -412,6 +538,77 @@ function MessageCard({ message }) {
           dangerouslySetInnerHTML={{ __html: message.html }}
         />
       ) : null}
+
+      {showActions ? (
+        <>
+          <div className="actionRow">
+            <button
+              className="cardButton replyButton"
+              disabled={disableReply}
+              onClick={() => {
+                onOpenReply(message);
+              }}
+              type="button"
+            >
+              {isReplying ? "Replying..." : "Reply"}
+            </button>
+            <button
+              className="cardButton archiveButton"
+              disabled={disableArchive}
+              onClick={() => {
+                onArchive(message);
+              }}
+              type="button"
+            >
+              {isArchiving ? "Archiving..." : "Archive"}
+            </button>
+          </div>
+
+          {isReplyOpen ? (
+            <form
+              className="replyForm"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSendReply(message);
+              }}
+            >
+              <label className="replyLabel" htmlFor={`reply-${message.relativePath}`}>
+                Reply
+              </label>
+              <textarea
+                className="replyTextarea"
+                id={`reply-${message.relativePath}`}
+                onChange={(event) => {
+                  onReplyBodyChange(event.target.value);
+                }}
+                placeholder="Type your reply..."
+                value={replyBody}
+              />
+              <p className="replyHint">
+                UI-initiated replies are sent as <code>from: user</code> and then the
+                current inbox message is archived in the same client flow.
+              </p>
+              <div className="replyActions">
+                <button
+                  className="cardButton sendButton"
+                  disabled={Boolean(activeAction)}
+                  type="submit"
+                >
+                  {isReplying ? "Sending..." : "Send reply"}
+                </button>
+                <button
+                  className="cardButton cancelButton"
+                  disabled={Boolean(activeAction)}
+                  onClick={onCancelReply}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </>
+      ) : null}
     </article>
   );
 }
@@ -422,6 +619,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [replyTargetPath, setReplyTargetPath] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [activeAction, setActiveAction] = useState("");
 
   const refreshMessages = useEffectEvent(async ({ signal, background = false } = {}) => {
     if (!background) {
@@ -463,6 +663,87 @@ export default function App() {
     };
   }, [refreshMessages]);
 
+  const openReply = useEffectEvent((message) => {
+    setError("");
+    setReplyTargetPath(message.relativePath);
+    setReplyBody("");
+  });
+
+  const cancelReply = useEffectEvent(() => {
+    if (activeAction) {
+      return;
+    }
+
+    setReplyTargetPath("");
+    setReplyBody("");
+  });
+
+  const sendReply = useEffectEvent(async (message) => {
+    const target = getReplyTarget(message);
+    const trimmedBody = replyBody.trim();
+
+    if (!target) {
+      setError("Reply target must be Claude or Codex.");
+      return;
+    }
+
+    if (!trimmedBody) {
+      setError("Reply body is required.");
+      return;
+    }
+
+    setActiveAction(`reply:${message.relativePath}`);
+
+    try {
+      await postReply({
+        to: target,
+        thread: message.thread,
+        body: trimmedBody,
+        replyTo:
+          typeof message.metadata?.id === "string" ? message.metadata.id : undefined
+      });
+      await archiveMessage({
+        relativePath: message.relativePath,
+        resolution: "answered"
+      });
+      setReplyTargetPath("");
+      setReplyBody("");
+      setError("");
+      await refreshMessages();
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : String(actionError)
+      );
+      await refreshMessages({ background: true });
+    } finally {
+      setActiveAction("");
+    }
+  });
+
+  const archiveInboxMessage = useEffectEvent(async (message) => {
+    setActiveAction(`archive:${message.relativePath}`);
+
+    try {
+      await archiveMessage({
+        relativePath: message.relativePath,
+        resolution: "no-reply-needed"
+      });
+      if (replyTargetPath === message.relativePath) {
+        setReplyTargetPath("");
+        setReplyBody("");
+      }
+      setError("");
+      await refreshMessages();
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : String(actionError)
+      );
+      await refreshMessages({ background: true });
+    } finally {
+      setActiveAction("");
+    }
+  });
+
   const totalMessages =
     messages.toClaude.length + messages.toCodex.length + messages.archive.length;
   const isEmpty = totalMessages === 0;
@@ -477,8 +758,9 @@ export default function App() {
               <p className="eyebrow">Local mailbox dashboard</p>
               <h1>Read-only view over the file-based protocol.</h1>
               <p className="subhead">
-                Files remain the source of truth. This dashboard only reads mailbox
-                markdown via the local API and refreshes every three seconds.
+                Files remain the source of truth. This dashboard can view, reply to,
+                and archive mailbox messages through the local API while polling every
+                three seconds.
               </p>
             </div>
 
@@ -554,7 +836,19 @@ What should happen next?`}</pre>
                     </p>
                   ) : (
                     messages[column.key].map((message) => (
-                      <MessageCard key={message.relativePath} message={message} />
+                      <MessageCard
+                        activeAction={activeAction}
+                        isReplyOpen={replyTargetPath === message.relativePath}
+                        key={message.relativePath}
+                        message={message}
+                        onArchive={archiveInboxMessage}
+                        onCancelReply={cancelReply}
+                        onOpenReply={openReply}
+                        onReplyBodyChange={setReplyBody}
+                        onSendReply={sendReply}
+                        replyBody={replyTargetPath === message.relativePath ? replyBody : ""}
+                        showActions={column.key !== "archive"}
+                      />
                     ))
                   )}
                 </div>
