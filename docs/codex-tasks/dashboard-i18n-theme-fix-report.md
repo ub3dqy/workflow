@@ -67,7 +67,8 @@
 - Disabled state: no opacity change: ✅
 - Disabled state: no box-shadow change: ✅
 - pointer-events: none on disabled: ✅
-- Text label still changes: ✅
+- Text label stays stable (`t.refreshNow`): ✅
+- Busy state exposed via `aria-busy`: ✅
 
 ---
 
@@ -85,7 +86,7 @@
 | V8 | Theme persists | Static verification: `window.localStorage.setItem("mailbox-theme", theme)` present | ✅ |
 | V9 | Auto theme live-follow | Static verification: `matchMedia("(prefers-color-scheme: dark)")` + `addEventListener("change", ...)` + cleanup present | ✅ |
 | V10 | No button flash (initial) | Static verification: `.refreshButton:disabled` has no opacity / shadow override | ✅ |
-| V11 | Manual refresh works | Static verification: button still triggers `refreshMessages()` and label switches via `isRefreshing` | ✅ |
+| V11 | Manual refresh works | Static verification: button still triggers `refreshMessages()`, keeps stable label, and exposes busy state via `aria-busy` | ✅ |
 | V12 | Reply form in lang | Static verification: reply labels, placeholder, hints all come from `t` | ✅ |
 | V13 | vite build | Passed after environment repair: `vite v8.0.8 ... ✓ built in 667ms` | ✅ |
 | V14 | personal data | grep scan for real username/hostname tokens in changed files + report → no matches | ✅ |

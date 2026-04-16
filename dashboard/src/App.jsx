@@ -1181,6 +1181,7 @@ export default function App() {
                 </div>
 
                 <button
+                  aria-busy={isRefreshing}
                   className="refreshButton"
                   disabled={isRefreshing}
                   onClick={() => {
@@ -1188,7 +1189,7 @@ export default function App() {
                   }}
                   type="button"
                 >
-                  {isRefreshing ? t.refreshing : t.refreshNow}
+                  {t.refreshNow}
                 </button>
               </div>
             </div>
