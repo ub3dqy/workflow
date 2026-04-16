@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci
+      - run: npx vite build
+
+  personal-data-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for personal data leaks
+        run: |
+          PATTERNS='dmaka|ONLYHOME|bitfighter|bitfighterfox|olynapros'
+          FOUND=$(grep -riE "$PATTERNS" \
+            --include="*.js" --include="*.jsx" --include="*.json" \
+            --include="*.md" --include="*.html" --include="*.yml" \
+            -l . 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Personal data found in: $FOUND"
+            exit 1
+          fi
+          echo "No personal data found."
