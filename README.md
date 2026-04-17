@@ -85,6 +85,15 @@ See [`local-claude-codex-mailbox-workflow.md`](./local-claude-codex-mailbox-work
 
 ---
 
+## 🧠 Teaching agents about the mailbox
+
+The dashboard только visualizes — agents need to know mailbox exists и как им пользоваться. Without this step дашборд останется пустым: агенты просто не догадаются проверять и отправлять сообщения. Choose one:
+
+- **Session-start prompt** — подготовьте короткую инструкцию с CLI commands (`send`, `list`, `reply`, `archive`, `recover`) и попросите агента читать её в начале каждой сессии. База: [`local-claude-codex-mailbox-workflow.md`](./local-claude-codex-mailbox-workflow.md).
+- **Persistent knowledge base** *(recommended)* — добавьте раздел `agent mail` в свою LLM wiki / memory system. SessionStart hook или context injection подтягивает его в каждую сессию автоматически — агенты проверяют inbox, отвечают и архивируют без ручного напоминания. Такой раздел должен покрывать triggers (`прочитай почту`, `ответь`, `архивируй`), inbox handling default, chat-reporting policy и typовые CLI-паттерны.
+
+---
+
 ## 🏗️ Architecture
 
 ```mermaid
