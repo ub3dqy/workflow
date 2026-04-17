@@ -1,13 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const requireFromDashboard = createRequire(
   new URL("../dashboard/package.json", import.meta.url)
 );
 const matter = requireFromDashboard("gray-matter");
-const { marked } = requireFromDashboard("marked");
+const markedModule = await import(
+  pathToFileURL(requireFromDashboard.resolve("marked")).href
+);
+const { marked } = markedModule;
 
 export const host = "127.0.0.1";
 export const port = 3003;
