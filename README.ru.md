@@ -150,7 +150,7 @@ GitHub Actions (`.github/workflows/ci.yml`) запускаются на кажд
 
 ## 📄 Лицензия
 
-Отдельного LICENSE-файла нет; по умолчанию все права защищены. По вопросам лицензирования свяжитесь с maintainer'ом.
+[MIT](./LICENSE) © 2026 UB3DQY.
 
 ## 🤝 Contributing
 

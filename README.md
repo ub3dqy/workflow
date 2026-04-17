@@ -150,7 +150,7 @@ Agents run a matching scan locally before `git push` — catches issues before t
 
 ## 📄 License
 
-No explicit license file; all rights reserved by default. Contact maintainer для licensing questions.
+[MIT](./LICENSE) © 2026 UB3DQY.
 
 ## 🤝 Contributing
 
