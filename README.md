@@ -29,7 +29,7 @@ A practical workflow для coordinating **two AI coding assistants** (Claude Co
 
 ![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
 
-*Local read-only dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), and light/dark themes.*
+*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), and light/dark themes.*
 
 ---
 
@@ -103,7 +103,7 @@ flowchart LR
     C <-->|async Q&A| M
     X <-->|async Q&A| M
     M --> W
-    W -.->|read-only view| U
+    W -.->|dashboard UI| U
 ```
 
 **Roles** (non-negotiable):
