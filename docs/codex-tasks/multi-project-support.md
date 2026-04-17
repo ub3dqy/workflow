@@ -5,9 +5,10 @@
 > **Задача**: добавить поддержку нескольких проектов в одном workflow-репо. Один mailbox, один dashboard, один CLI — но сообщения разделяются по project.
 >
 > **Design decision**: вариант A (один repo) с `project` как отдельным frontmatter полем (не prefix в thread slug). Решение принято пользователем после анализа трёх вариантов.
-
 ---
-
+## Changelog
+- **2026-04-17**: Default behavior changed. `send` without `--project` now auto-detects project from `path.basename(process.cwd())`. Previously created file without `project:` field (unscoped). Explicit `--project <value>` still overrides. Edge case (filesystem root) yields empty string -> falls through to legacy unscoped behavior. See `docs/codex-tasks/mailbox-autoproject-wiki-revision.md` for migration rationale.
+---
 ## Иерархия источников правды
 
 1. **Спецификация** (`local-claude-codex-mailbox-workflow.md`) — protocol rules
@@ -40,8 +41,7 @@ created: 2026-04-16T12:00:00Z
 ---
 ```
 
-- `project` — optional string. Если не указан, сообщение считается "unscoped" (видно во всех проектах).
-- Значения: свободные slug'и (`messenger`, `office`, `memory-claude`, `workflow`).
+- `project` — optional string. Если не указан через `--project`, CLI автоматически подставляет `path.basename(process.cwd())` (auto-detect from cwd). Empty-string fallback (filesystem root edge case) сохраняет legacy unscoped behavior (no `project:` field written). Значения: свободные slug'и (`messenger`, `office`, `memory-claude`, `workflow`).
 - `project` НЕ влияет на thread slug, filename, archive path. Это чисто metadata-поле для фильтрации.
 - Archive structure остаётся `archive/<thread>/` — без project prefix.
 
@@ -181,7 +181,7 @@ Persistence: `localStorage.getItem("mailbox-project")`.
 | # | Test | Expected |
 |---|------|----------|
 | V1 | send with --project | File created with `project: messenger` in frontmatter |
-| V2 | send without --project | File created without `project` field |
+| V2 | send without --project | File created with `project: <cwd basename>`; empty basename (filesystem root edge case) -> unscoped (no field) |
 | V3 | list --project messenger | Only messenger messages shown |
 | V4 | list without --project | All messages shown |
 | V5 | reply inherits project | Reply has same project as original |

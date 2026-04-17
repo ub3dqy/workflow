@@ -102,7 +102,7 @@ function formatTable(messages) {
 function usageText() {
   return [
     "Usage:",
-    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> [--project <name>] (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
+    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> [--project <name> | auto=basename(cwd)] (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
     "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] [--project <name>] [--json]",
     "  node scripts/mailbox.mjs reply --to <relativePath> (--body <text> | --file <path>) [--from <user|claude|codex>]",
     "  node scripts/mailbox.mjs archive --path <relativePath> [--resolution <answered|no-reply-needed|superseded>]",
@@ -124,7 +124,8 @@ async function handleSend(args) {
   });
   const from = validateSender(options.from);
   const thread = validateThread(options.thread);
-  const project = normalizeProject(options.project);
+  const explicitProject = normalizeProject(options.project);
+  const project = explicitProject || path.basename(process.cwd());
   const body = await readBody(options);
   const messages = await collectMailboxMessages(mailboxRoot);
 
