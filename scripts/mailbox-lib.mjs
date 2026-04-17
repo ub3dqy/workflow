@@ -530,10 +530,10 @@ export function getReplyTargetForMessage(message, from = "user") {
   const nonSender = participants.find((value) => value !== sender);
 
   if (!nonSender) {
-    throw new ClientError(
-      400,
-      "cannot infer reply target for this sender from target message"
-    );
+    // Single-agent-participant case: message was from/to "user" (or non-agent sender),
+    // leaving only the replying agent as the known participant. In the dual-agent
+    // workflow (claude ↔ codex), default reply target to the "other" agent.
+    return sender === "claude" ? "codex" : "claude";
   }
 
   return nonSender;
