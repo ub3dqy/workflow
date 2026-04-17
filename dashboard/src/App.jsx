@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { archiveMessage, fetchMessages, postReply } from "./api.js";
 
 const pollIntervalMs = 3000;
@@ -58,7 +58,9 @@ const translations = {
     themeGroupLabel: "Переключатель темы",
     themeLight: "Светлая",
     themeDark: "Тёмная",
-    themeAuto: "Авто"
+    themeAuto: "Авто",
+    soundMute: "Выключить звук уведомлений",
+    soundUnmute: "Включить звук уведомлений"
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -109,9 +111,42 @@ const translations = {
     themeGroupLabel: "Theme switcher",
     themeLight: "Light",
     themeDark: "Dark",
-    themeAuto: "Auto"
+    themeAuto: "Auto",
+    soundMute: "Mute notification sound",
+    soundUnmute: "Unmute notification sound"
   }
 };
+
+function playNotificationChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    // Pleasant rising arpeggio: C5 E5 G5 C6 (C major)
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    const noteSpacing = 0.4;
+    const noteDuration = 1.0;
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const startTime = ctx.currentTime + i * noteSpacing;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.18, startTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + noteDuration);
+      osc.start(startTime);
+      osc.stop(startTime + noteDuration);
+    });
+    setTimeout(
+      () => ctx.close().catch(() => {}),
+      (notes.length * noteSpacing + noteDuration + 0.2) * 1000
+    );
+  } catch {}
+}
+
 const styles = `
   :root {
     color-scheme: light;
@@ -344,6 +379,7 @@ const styles = `
   }
 
   .langButton,
+  .soundButton,
   .projectSelect,
   .refreshButton {
     border: 0;
@@ -358,10 +394,17 @@ const styles = `
       color 140ms ease;
   }
 
-  .langButton {
+  .langButton,
+  .soundButton {
     background: var(--surface-control);
     color: var(--text-strong);
     box-shadow: var(--button-outline-border);
+  }
+
+  .soundButton {
+    padding: 10px 14px;
+    font-size: 18px;
+    line-height: 1;
   }
 
   .projectSelect {
@@ -380,6 +423,7 @@ const styles = `
   }
 
   .langButton:hover,
+  .soundButton:hover,
   .projectSelect:hover {
     transform: translateY(-1px);
   }
@@ -390,6 +434,7 @@ const styles = `
   }
 
   .langButton:disabled,
+  .soundButton:disabled,
   .projectSelect:disabled,
   .refreshButton:disabled {
     cursor: progress;
@@ -1099,6 +1144,10 @@ export default function App() {
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     getSystemPrefersDark()
   );
+  const [soundEnabled, setSoundEnabled] = useState(
+    () => getStoredText("mailbox-sound", "on") !== "off"
+  );
+  const prevPendingCountsRef = useRef(null);
 
   const t = translations[lang] ?? translations.ru;
   const columns = getColumns(t);
@@ -1124,6 +1173,12 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem("mailbox-sound", soundEnabled ? "on" : "off");
+    } catch {}
+  }, [soundEnabled]);
+
+  useEffect(() => {
     if (typeof document === "undefined") {
       return;
     }
@@ -1139,6 +1194,23 @@ export default function App() {
     const pendingCount = messages.toClaude.length + messages.toCodex.length;
     document.title = pendingCount > 0 ? `(${pendingCount}) Mailbox Dashboard` : "Mailbox Dashboard";
   }, [messages.toClaude.length, messages.toCodex.length]);
+
+  useEffect(() => {
+    const toClaudeCount = messages.toClaude.length;
+    const toCodexCount = messages.toCodex.length;
+    const prev = prevPendingCountsRef.current;
+    prevPendingCountsRef.current = { toClaude: toClaudeCount, toCodex: toCodexCount };
+
+    if (prev === null) {
+      return;
+    }
+
+    const increased =
+      toClaudeCount > prev.toClaude || toCodexCount > prev.toCodex;
+    if (increased && soundEnabled) {
+      playNotificationChime();
+    }
+  }, [messages.toClaude.length, messages.toCodex.length, soundEnabled]);
 
   useEffect(() => {
     if (theme !== "auto" || typeof window === "undefined") {
@@ -1374,6 +1446,19 @@ export default function App() {
                     type="button"
                   >
                     {t.langSwitch}
+                  </button>
+
+                  <button
+                    aria-label={soundEnabled ? t.soundMute : t.soundUnmute}
+                    aria-pressed={soundEnabled}
+                    className="soundButton"
+                    onClick={() => {
+                      setSoundEnabled((current) => !current);
+                    }}
+                    title={soundEnabled ? t.soundMute : t.soundUnmute}
+                    type="button"
+                  >
+                    {soundEnabled ? "🔊" : "🔇"}
                   </button>
 
                   <div
