@@ -48,8 +48,7 @@ app.get("/api/messages", async (request, response) => {
     ]);
     const projects = collectProjectValues([
       ...allToClaude,
-      ...allToCodex,
-      ...allArchive
+      ...allToCodex
     ]);
     const toClaude = filterMessagesByProject(allToClaude, requestedProject);
     const toCodex = filterMessagesByProject(allToCodex, requestedProject);
