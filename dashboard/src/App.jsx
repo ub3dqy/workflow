@@ -380,12 +380,12 @@ const styles = `
   }
 
   .langButton:hover,
-  .projectSelect:hover,
-  .refreshButton:hover {
+  .projectSelect:hover {
     transform: translateY(-1px);
   }
 
   .refreshButton:hover {
+    /* No translateY: prevents hover-zone jitter loop when cursor sits near button edge */
     box-shadow: var(--button-primary-shadow-hover);
   }
 
@@ -443,23 +443,20 @@ const styles = `
   }
 
   .emptyState {
-    padding: 24px 28px;
+    margin-top: 16px;
+    padding: 14px 16px;
     border: 1px dashed var(--border-dashed);
-    border-radius: 20px;
+    border-radius: 16px;
     background: var(--surface-empty);
     box-shadow: var(--shadow-inset);
   }
 
-  .emptyState h2 {
-    margin: 0 0 6px;
-    font-size: 20px;
-  }
-
   .emptyHintLine {
     margin: 0;
-    max-width: 760px;
+    max-width: 860px;
     line-height: 1.55;
     color: var(--text-secondary);
+    font-size: 14px;
   }
 
   .emptyDetails {
@@ -1217,7 +1214,10 @@ export default function App() {
       controller.abort();
       window.clearInterval(intervalId);
     };
-  }, [project, refreshMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // refreshMessages is a useEffectEvent (stable identity by design); including it в deps
+    // causes infinite re-mount loop если React's useEffectEvent identity isn't perfectly stable.
+  }, [project]);
 
   const openReply = useEffectEvent((message) => {
     setError("");
@@ -1414,30 +1414,6 @@ export default function App() {
             <div className="errorBanner">
               <strong>{t.apiError}</strong> {error}
             </div>
-          ) : null}
-
-          {isEmpty && !isLoading ? (
-            <section className="emptyState">
-              <h2>{t.mailboxEmpty}</h2>
-              <p className="emptyHintLine">
-                {t.emptyHint}
-                <code> agent-mailbox/to-claude/</code> {t.emptyHintOr}
-                <code> agent-mailbox/to-codex/</code>.
-              </p>
-              <details className="emptyDetails">
-                <summary className="emptySummary">{t.showExample}</summary>
-                <p className="emptyFrontmatterHint">{t.emptyFrontmatterHint}</p>
-                <pre className="codeBlock">{`---
-from: claude
-to: codex
-thread: example-thread
-status: pending
-created: 2026-04-16T08:00:00Z
----
-
-What should happen next?`}</pre>
-              </details>
-            </section>
           ) : null}
 
           <section className="grid">
