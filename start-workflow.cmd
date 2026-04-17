@@ -6,8 +6,12 @@ cd /d "%~dp0dashboard"
 rem Skip npm install when package-lock.json matches snapshot from last install
 set "STAMP=node_modules\.package-lock.snapshot"
 set "NEED_INSTALL=0"
+set "WIN_ROLLDOWN_BINDING=node_modules\@rolldown\binding-win32-x64-msvc"
 
 if not exist node_modules (
+  set "NEED_INSTALL=1"
+) else if not exist "%WIN_ROLLDOWN_BINDING%" (
+  rem Shared node_modules can miss the Windows-native Vite binding after WSL installs.
   set "NEED_INSTALL=1"
 ) else if not exist "%STAMP%" (
   set "NEED_INSTALL=1"
