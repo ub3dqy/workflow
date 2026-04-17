@@ -29,7 +29,7 @@ A practical workflow для coordinating **two AI coding assistants** (Claude Co
 
 ![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
 
-*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), and light/dark themes.*
+*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), light/dark themes, tab-title badge + favicon для pending count, и audio chime с mute toggle когда приходит новое сообщение.*
 
 ---
 
