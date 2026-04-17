@@ -8,6 +8,9 @@
     "server": "node server.js",
     "build": "vite build"
   },
+  "engines": {
+    "node": ">=20.19"
+  },
   "dependencies": {
     "express": "^5.2.1",
     "gray-matter": "^4.0.3",

@@ -11,3 +11,6 @@ dashboard/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Codex CLI sandbox state (personal, per-session)
+.codex
