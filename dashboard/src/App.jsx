@@ -506,6 +506,9 @@ const styles = `
 
   .column {
     min-height: 420px;
+    max-height: calc(100vh - 240px);
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--border-soft);
     border-radius: 24px;
     background: var(--surface-column);
@@ -519,6 +522,7 @@ const styles = `
     justify-content: space-between;
     gap: 16px;
     padding: 18px 20px;
+    flex-shrink: 0;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--surface-header);
   }
@@ -543,6 +547,9 @@ const styles = `
     display: grid;
     gap: 14px;
     padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
   }
 
   .columnHint {
