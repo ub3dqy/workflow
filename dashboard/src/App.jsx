@@ -1133,6 +1133,14 @@ export default function App() {
   }, [resolvedTheme]);
 
   useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const pendingCount = messages.toClaude.length + messages.toCodex.length;
+    document.title = pendingCount > 0 ? `(${pendingCount}) Mailbox Dashboard` : "Mailbox Dashboard";
+  }, [messages.toClaude.length, messages.toCodex.length]);
+
+  useEffect(() => {
     if (theme !== "auto" || typeof window === "undefined") {
       return;
     }
