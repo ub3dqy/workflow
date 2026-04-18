@@ -461,7 +461,7 @@ export async function nextSequenceForThreadFrom(
 
 export async function generateMessageFile({
   to,
-  from = "user",
+  from,
   thread,
   project = "",
   body,
@@ -592,7 +592,7 @@ export async function archiveMessageFile({
   };
 }
 
-export function getReplyTargetForMessage(message, from = "user") {
+export function getReplyTargetForMessage(message, from) {
   const sender = validateSender(from);
   const participants = [message.from, message.to].filter((value, index, values) => {
     return allowedReplyTargets.has(value) && values.indexOf(value) === index;

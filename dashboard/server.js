@@ -6,7 +6,6 @@ import {
   ClientError,
   defaultMailboxRoot,
   filterMessagesByProject,
-  generateMessageFile,
   host,
   isKnownBucket,
   normalizeProject,
@@ -14,9 +13,7 @@ import {
   readBucket,
   sanitizeString,
   validateRelativeInboxPath,
-  validateReplyTarget,
-  validateResolution,
-  validateThread
+  validateResolution
 } from "../scripts/mailbox-lib.mjs";
 
 const mailboxRoot = defaultMailboxRoot;
@@ -82,45 +79,6 @@ app.get("/api/messages/:dir", async (request, response) => {
   } catch (error) {
     response.status(500).json({
       error: "Failed to read mailbox",
-      details: error instanceof Error ? error.message : String(error)
-    });
-  }
-});
-
-app.post("/api/reply", async (request, response) => {
-  try {
-    const to = validateReplyTarget(request.body?.to);
-    const thread = validateThread(request.body?.thread);
-    const project = normalizeProject(request.body?.project);
-    const body = sanitizeString(request.body?.body);
-    const replyTo = sanitizeString(request.body?.reply_to);
-
-    if (!body) {
-      throw new ClientError(400, "body is required");
-    }
-
-    const created = await generateMessageFile({
-      to,
-      thread,
-      project,
-      body,
-      replyTo,
-      mailboxRoot
-    });
-
-    response.status(201).json({
-      ok: true,
-      filename: created.filename,
-      id: created.id,
-      relativePath: created.relativePath
-    });
-  } catch (error) {
-    if (sendClientError(response, error)) {
-      return;
-    }
-
-    response.status(500).json({
-      error: "Failed to create reply",
       details: error instanceof Error ? error.message : String(error)
     });
   }

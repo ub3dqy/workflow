@@ -104,7 +104,7 @@ function usageText() {
     "Usage:",
     "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> [--project <name> | auto=basename(cwd)] (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
     "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] [--project <name>] [--json]",
-    "  node scripts/mailbox.mjs reply --to <relativePath> (--body <text> | --file <path>) [--from <user|claude|codex>]",
+    "  node scripts/mailbox.mjs reply --from <user|claude|codex> --to <relativePath> (--body <text> | --file <path>)",
     "  node scripts/mailbox.mjs archive --path <relativePath> [--resolution <answered|no-reply-needed|superseded>]",
     "  node scripts/mailbox.mjs recover"
   ].join("\n");
@@ -194,7 +194,7 @@ async function handleReply(args) {
     file: { type: "string" },
     json: { type: "boolean" }
   });
-  const from = validateSender(options.from || "user");
+  const from = validateSender(options.from);
   const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot);
   const body = await readBody(options);
   const to = getReplyTargetForMessage(targetMessage, from);

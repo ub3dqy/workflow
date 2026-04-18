@@ -30,24 +30,6 @@ export async function fetchMessages(signal, project) {
   return parseJsonResponse(response, `Mailbox API returned ${response.status}`);
 }
 
-export async function postReply({ to, thread, project, body, replyTo }) {
-  const response = await fetch("/api/reply", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      to,
-      thread,
-      project,
-      body,
-      reply_to: replyTo
-    })
-  });
-
-  return parseJsonResponse(response, `Reply API returned ${response.status}`);
-}
-
 export async function archiveMessage({ relativePath, resolution }) {
   const response = await fetch("/api/archive", {
     method: "POST",

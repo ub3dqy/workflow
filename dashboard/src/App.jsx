@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { archiveMessage, fetchMessages, postNote, postReply } from "./api.js";
+import { archiveMessage, fetchMessages, postNote } from "./api.js";
 
 const pollIntervalMs = 3000;
 const emptyData = {
@@ -32,15 +32,8 @@ const translations = {
     loading: "Загрузка...",
     noMessages: "Нет сообщений.",
     noTimestamp: "Нет даты",
-    reply: "Ответить",
-    replying: "Отправка...",
     archiveButton: "Архивировать",
     archiving: "Архивирование...",
-    replyLabel: "Ответ",
-    replyPlaceholder: "Введите ответ...",
-    replyHint:
-      "Ответы из UI отправляются как from: user, после чего исходное сообщение автоматически архивируется.",
-    sendReply: "Отправить",
     sending: "Отправка...",
     cancel: "Отмена",
     apiError: "Ошибка API mailbox:",
@@ -51,8 +44,6 @@ const translations = {
     project: "Проект",
     allProjects: "Все проекты",
     relatedFiles: "Связанные файлы",
-    replyTargetError: "Получатель ответа должен быть Claude или Codex.",
-    replyBodyError: "Текст ответа обязателен.",
     languageSwitchLabel: "Сменить язык",
     langSwitch: "EN",
     themeGroupLabel: "Переключатель темы",
@@ -94,15 +85,8 @@ const translations = {
     loading: "Loading mailbox state...",
     noMessages: "No messages in this bucket yet.",
     noTimestamp: "No timestamp",
-    reply: "Reply",
-    replying: "Replying...",
     archiveButton: "Archive",
     archiving: "Archiving...",
-    replyLabel: "Reply",
-    replyPlaceholder: "Type your reply...",
-    replyHint:
-      "UI-initiated replies are sent as from: user and then the current inbox message is archived in the same client flow.",
-    sendReply: "Send reply",
     sending: "Sending...",
     cancel: "Cancel",
     apiError: "Mailbox API error:",
@@ -113,8 +97,6 @@ const translations = {
     project: "Project",
     allProjects: "All projects",
     relatedFiles: "Related files",
-    replyTargetError: "Reply target must be Claude or Codex.",
-    replyBodyError: "Reply body is required.",
     languageSwitchLabel: "Switch language",
     langSwitch: "RU",
     themeGroupLabel: "Theme switcher",
@@ -978,47 +960,25 @@ function formatTimestamp(value, lang, t) {
   }).format(new Date(parsed));
 }
 
-function getReplyTarget(message) {
-  if (message.from === "claude" || message.from === "codex") {
-    return message.from;
-  }
-
-  if (message.to === "claude" || message.to === "codex") {
-    return message.to;
-  }
-
-  return "";
-}
-
 function MessageCard({
   activeAction,
   isNoteOpen,
-  isReplyOpen,
   lang,
   message,
   onArchive,
   onCancelNote,
-  onCancelReply,
   onNoteBodyChange,
   onOpenNote,
-  onOpenReply,
-  onReplyBodyChange,
   onSendNote,
-  onSendReply,
   noteBody,
-  replyBody,
   showActions,
   t
 }) {
-  const replyTarget = getReplyTarget(message);
   const isNoting = activeAction === `note:${message.relativePath}`;
-  const isReplying = activeAction === `reply:${message.relativePath}`;
   const isArchiving = activeAction === `archive:${message.relativePath}`;
   const disableArchive = Boolean(activeAction);
-  const disableReply = Boolean(activeAction) || !replyTarget;
   const disableNote = Boolean(activeAction) || isNoteOpen;
   const noteFormRef = useRef(null);
-  const replyFormRef = useRef(null);
 
   useEffect(() => {
     if (isNoteOpen && noteFormRef.current) {
@@ -1026,26 +986,10 @@ function MessageCard({
     }
   }, [isNoteOpen]);
 
-  useEffect(() => {
-    if (isReplyOpen && replyFormRef.current) {
-      replyFormRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
-  }, [isReplyOpen]);
-
   const renderActionRow = () => (
     <div className="actionRow">
       {showActions ? (
         <>
-          <button
-            className="cardButton cardButton--primary"
-            disabled={disableReply}
-            onClick={() => {
-              onOpenReply(message);
-            }}
-            type="button"
-          >
-            {isReplying ? t.replying : t.reply}
-          </button>
           <button
             className="cardButton cardButton--secondary"
             disabled={disableArchive}
@@ -1134,52 +1078,6 @@ function MessageCard({
 
       {renderActionRow()}
 
-      {showActions && isReplyOpen ? (
-        <>
-          <form
-            className="replyForm"
-            ref={replyFormRef}
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSendReply(message);
-            }}
-          >
-            <label className="replyLabel" htmlFor={`reply-${message.relativePath}`}>
-              {t.replyLabel}
-            </label>
-            <textarea
-              className="replyTextarea"
-              id={`reply-${message.relativePath}`}
-              onChange={(event) => {
-                onReplyBodyChange(event.target.value);
-              }}
-              placeholder={t.replyPlaceholder}
-              value={replyBody}
-            />
-            <p className="replyHint">
-              {t.replyHint}
-            </p>
-            <div className="replyActions">
-              <button
-                className="cardButton cardButton--primary"
-                disabled={Boolean(activeAction)}
-                type="submit"
-              >
-                {isReplying ? t.sending : t.sendReply}
-              </button>
-              <button
-                className="cardButton cardButton--ghost"
-                disabled={Boolean(activeAction)}
-                onClick={onCancelReply}
-                type="button"
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </form>
-        </>
-      ) : null}
-
       {isNoteOpen ? (
         <form
           className="replyForm"
@@ -1231,8 +1129,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [replyTargetPath, setReplyTargetPath] = useState("");
-  const [replyBody, setReplyBody] = useState("");
   const [noteTargetPath, setNoteTargetPath] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [activeAction, setActiveAction] = useState("");
@@ -1402,27 +1298,8 @@ export default function App() {
     // causes infinite re-mount loop если React's useEffectEvent identity isn't perfectly stable.
   }, [project]);
 
-  const openReply = useEffectEvent((message) => {
-    setError("");
-    setNoteTargetPath("");
-    setNoteBody("");
-    setReplyTargetPath(message.relativePath);
-    setReplyBody("");
-  });
-
-  const cancelReply = useEffectEvent(() => {
-    if (activeAction) {
-      return;
-    }
-
-    setReplyTargetPath("");
-    setReplyBody("");
-  });
-
   const openNote = useEffectEvent((message) => {
     setError("");
-    setReplyTargetPath("");
-    setReplyBody("");
     setNoteTargetPath(message.relativePath);
     setNoteBody("");
   });
@@ -1440,49 +1317,6 @@ export default function App() {
     setLang((currentLang) => (currentLang === "ru" ? "en" : "ru"));
   });
 
-  const sendReply = useEffectEvent(async (message) => {
-    const target = getReplyTarget(message);
-    const trimmedBody = replyBody.trim();
-
-    if (!target) {
-      setError(t.replyTargetError);
-      return;
-    }
-
-    if (!trimmedBody) {
-      setError(t.replyBodyError);
-      return;
-    }
-
-    setActiveAction(`reply:${message.relativePath}`);
-
-    try {
-      await postReply({
-        to: target,
-        thread: message.thread,
-        project: message.project,
-        body: trimmedBody,
-        replyTo:
-          typeof message.metadata?.id === "string" ? message.metadata.id : undefined
-      });
-      await archiveMessage({
-        relativePath: message.relativePath,
-        resolution: "answered"
-      });
-      setReplyTargetPath("");
-      setReplyBody("");
-      setError("");
-      await refreshMessages();
-    } catch (actionError) {
-      setError(
-        actionError instanceof Error ? actionError.message : String(actionError)
-      );
-      await refreshMessages({ background: true });
-    } finally {
-      setActiveAction("");
-    }
-  });
-
   const archiveInboxMessage = useEffectEvent(async (message) => {
     setActiveAction(`archive:${message.relativePath}`);
 
@@ -1491,10 +1325,6 @@ export default function App() {
         relativePath: message.relativePath,
         resolution: "no-reply-needed"
       });
-      if (replyTargetPath === message.relativePath) {
-        setReplyTargetPath("");
-        setReplyBody("");
-      }
       if (noteTargetPath === message.relativePath) {
         setNoteTargetPath("");
         setNoteBody("");
@@ -1687,24 +1517,16 @@ export default function App() {
                       <MessageCard
                         activeAction={activeAction}
                         isNoteOpen={noteTargetPath === message.relativePath}
-                        isReplyOpen={replyTargetPath === message.relativePath}
                         key={message.relativePath}
                         lang={lang}
                         message={message}
                         onArchive={archiveInboxMessage}
                         onCancelNote={cancelNote}
-                        onCancelReply={cancelReply}
                         onNoteBodyChange={setNoteBody}
                         onOpenNote={openNote}
-                        onOpenReply={openReply}
-                        onReplyBodyChange={setReplyBody}
                         onSendNote={sendNote}
-                        onSendReply={sendReply}
                         noteBody={
                           noteTargetPath === message.relativePath ? noteBody : ""
-                        }
-                        replyBody={
-                          replyTargetPath === message.relativePath ? replyBody : ""
                         }
                         showActions={column.key !== "archive"}
                         t={t}
