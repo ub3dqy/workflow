@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { archiveMessage, fetchMessages, postReply } from "./api.js";
+import { archiveMessage, fetchMessages, postNote, postReply } from "./api.js";
 
 const pollIntervalMs = 3000;
 const emptyData = {
@@ -60,7 +60,16 @@ const translations = {
     themeDark: "Тёмная",
     themeAuto: "Авто",
     soundMute: "Выключить звук уведомлений",
-    soundUnmute: "Включить звук уведомлений"
+    soundUnmute: "Включить звук уведомлений",
+    addNote: "Добавить заметку",
+    addingNote: "Отправка...",
+    noteLabel: "Заметка от пользователя",
+    notePlaceholder: "Добавьте свой комментарий к карточке...",
+    noteHint:
+      "Заметка дописывается в конец сообщения как user-блок. Оригинальное сообщение агента не редактируется.",
+    sendNote: "Сохранить заметку",
+    noteBodyError: "Текст заметки обязателен.",
+    noteTooLong: "Заметка не может превышать 4000 символов."
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -113,7 +122,16 @@ const translations = {
     themeDark: "Dark",
     themeAuto: "Auto",
     soundMute: "Mute notification sound",
-    soundUnmute: "Unmute notification sound"
+    soundUnmute: "Unmute notification sound",
+    addNote: "Add note",
+    addingNote: "Saving...",
+    noteLabel: "User note",
+    notePlaceholder: "Add your comment to the card...",
+    noteHint:
+      "Notes are appended to the end of the message as a user block. The original agent message is not edited.",
+    sendNote: "Save note",
+    noteBodyError: "Note body is required.",
+    noteTooLong: "Note must be 4000 characters or fewer."
   }
 };
 
@@ -974,23 +992,84 @@ function getReplyTarget(message) {
 
 function MessageCard({
   activeAction,
+  isNoteOpen,
   isReplyOpen,
   lang,
   message,
   onArchive,
+  onCancelNote,
   onCancelReply,
+  onNoteBodyChange,
+  onOpenNote,
   onOpenReply,
   onReplyBodyChange,
+  onSendNote,
   onSendReply,
+  noteBody,
   replyBody,
   showActions,
   t
 }) {
   const replyTarget = getReplyTarget(message);
+  const isNoting = activeAction === `note:${message.relativePath}`;
   const isReplying = activeAction === `reply:${message.relativePath}`;
   const isArchiving = activeAction === `archive:${message.relativePath}`;
   const disableArchive = Boolean(activeAction);
   const disableReply = Boolean(activeAction) || !replyTarget;
+  const disableNote = Boolean(activeAction) || isNoteOpen;
+  const noteFormRef = useRef(null);
+  const replyFormRef = useRef(null);
+
+  useEffect(() => {
+    if (isNoteOpen && noteFormRef.current) {
+      noteFormRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [isNoteOpen]);
+
+  useEffect(() => {
+    if (isReplyOpen && replyFormRef.current) {
+      replyFormRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [isReplyOpen]);
+
+  const renderActionRow = () => (
+    <div className="actionRow">
+      {showActions ? (
+        <>
+          <button
+            className="cardButton cardButton--primary"
+            disabled={disableReply}
+            onClick={() => {
+              onOpenReply(message);
+            }}
+            type="button"
+          >
+            {isReplying ? t.replying : t.reply}
+          </button>
+          <button
+            className="cardButton cardButton--secondary"
+            disabled={disableArchive}
+            onClick={() => {
+              onArchive(message);
+            }}
+            type="button"
+          >
+            {isArchiving ? t.archiving : t.archiveButton}
+          </button>
+        </>
+      ) : null}
+      <button
+        className="cardButton cardButton--secondary"
+        disabled={disableNote}
+        onClick={() => {
+          onOpenNote(message);
+        }}
+        type="button"
+      >
+        {isNoting ? t.addingNote : t.addNote}
+      </button>
+    </div>
+  );
 
   const isArchived = !showActions;
 
@@ -1044,6 +1123,8 @@ function MessageCard({
         </div>
       ) : null}
 
+      {renderActionRow()}
+
       {message.html ? (
         <section
           className="body"
@@ -1051,74 +1132,94 @@ function MessageCard({
         />
       ) : null}
 
-      {showActions ? (
+      {renderActionRow()}
+
+      {showActions && isReplyOpen ? (
         <>
-          <div className="actionRow">
+          <form
+            className="replyForm"
+            ref={replyFormRef}
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSendReply(message);
+            }}
+          >
+            <label className="replyLabel" htmlFor={`reply-${message.relativePath}`}>
+              {t.replyLabel}
+            </label>
+            <textarea
+              className="replyTextarea"
+              id={`reply-${message.relativePath}`}
+              onChange={(event) => {
+                onReplyBodyChange(event.target.value);
+              }}
+              placeholder={t.replyPlaceholder}
+              value={replyBody}
+            />
+            <p className="replyHint">
+              {t.replyHint}
+            </p>
+            <div className="replyActions">
+              <button
+                className="cardButton cardButton--primary"
+                disabled={Boolean(activeAction)}
+                type="submit"
+              >
+                {isReplying ? t.sending : t.sendReply}
+              </button>
+              <button
+                className="cardButton cardButton--ghost"
+                disabled={Boolean(activeAction)}
+                onClick={onCancelReply}
+                type="button"
+              >
+                {t.cancel}
+              </button>
+            </div>
+          </form>
+        </>
+      ) : null}
+
+      {isNoteOpen ? (
+        <form
+          className="replyForm"
+          ref={noteFormRef}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSendNote(message);
+          }}
+        >
+          <label className="replyLabel" htmlFor={`note-${message.relativePath}`}>
+            {t.noteLabel}
+          </label>
+          <textarea
+            className="replyTextarea"
+            id={`note-${message.relativePath}`}
+            onChange={(event) => {
+              onNoteBodyChange(event.target.value);
+            }}
+            placeholder={t.notePlaceholder}
+            value={noteBody}
+          />
+          <p className="replyHint">{t.noteHint}</p>
+          <div className="replyActions">
             <button
               className="cardButton cardButton--primary"
-              disabled={disableReply}
-              onClick={() => {
-                onOpenReply(message);
-              }}
-              type="button"
+              disabled={Boolean(activeAction)}
+              type="submit"
             >
-              {isReplying ? t.replying : t.reply}
+              {isNoting ? t.addingNote : t.sendNote}
             </button>
             <button
-              className="cardButton cardButton--secondary"
-              disabled={disableArchive}
-              onClick={() => {
-                onArchive(message);
-              }}
+              className="cardButton cardButton--ghost"
+              disabled={Boolean(activeAction)}
+              onClick={onCancelNote}
               type="button"
             >
-              {isArchiving ? t.archiving : t.archiveButton}
+              {t.cancel}
             </button>
           </div>
-
-          {isReplyOpen ? (
-            <form
-              className="replyForm"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSendReply(message);
-              }}
-            >
-              <label className="replyLabel" htmlFor={`reply-${message.relativePath}`}>
-                {t.replyLabel}
-              </label>
-              <textarea
-                className="replyTextarea"
-                id={`reply-${message.relativePath}`}
-                onChange={(event) => {
-                  onReplyBodyChange(event.target.value);
-                }}
-                placeholder={t.replyPlaceholder}
-                value={replyBody}
-              />
-              <p className="replyHint">
-                {t.replyHint}
-              </p>
-              <div className="replyActions">
-                <button
-                  className="cardButton cardButton--primary"
-                  disabled={Boolean(activeAction)}
-                  type="submit"
-                >
-                  {isReplying ? t.sending : t.sendReply}
-                </button>
-                <button
-                  className="cardButton cardButton--ghost"
-                  disabled={Boolean(activeAction)}
-                  onClick={onCancelReply}
-                  type="button"
-                >
-                  {t.cancel}
-                </button>
-              </div>
-            </form>
-          ) : null}
-        </>
+        </form>
       ) : null}
     </article>
   );
@@ -1132,6 +1233,8 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState("");
   const [replyTargetPath, setReplyTargetPath] = useState("");
   const [replyBody, setReplyBody] = useState("");
+  const [noteTargetPath, setNoteTargetPath] = useState("");
+  const [noteBody, setNoteBody] = useState("");
   const [activeAction, setActiveAction] = useState("");
   const [availableProjects, setAvailableProjects] = useState([]);
   const [lang, setLang] = useState(() =>
@@ -1301,6 +1404,8 @@ export default function App() {
 
   const openReply = useEffectEvent((message) => {
     setError("");
+    setNoteTargetPath("");
+    setNoteBody("");
     setReplyTargetPath(message.relativePath);
     setReplyBody("");
   });
@@ -1312,6 +1417,23 @@ export default function App() {
 
     setReplyTargetPath("");
     setReplyBody("");
+  });
+
+  const openNote = useEffectEvent((message) => {
+    setError("");
+    setReplyTargetPath("");
+    setReplyBody("");
+    setNoteTargetPath(message.relativePath);
+    setNoteBody("");
+  });
+
+  const cancelNote = useEffectEvent(() => {
+    if (activeAction) {
+      return;
+    }
+
+    setNoteTargetPath("");
+    setNoteBody("");
   });
 
   const toggleLanguage = useEffectEvent(() => {
@@ -1373,6 +1495,44 @@ export default function App() {
         setReplyTargetPath("");
         setReplyBody("");
       }
+      if (noteTargetPath === message.relativePath) {
+        setNoteTargetPath("");
+        setNoteBody("");
+      }
+      setError("");
+      await refreshMessages();
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : String(actionError)
+      );
+      await refreshMessages({ background: true });
+    } finally {
+      setActiveAction("");
+    }
+  });
+
+  const sendNote = useEffectEvent(async (message) => {
+    const trimmed = noteBody.trim();
+
+    if (!trimmed) {
+      setError(t.noteBodyError);
+      return;
+    }
+
+    if (trimmed.length > 4000) {
+      setError(t.noteTooLong);
+      return;
+    }
+
+    setActiveAction(`note:${message.relativePath}`);
+
+    try {
+      await postNote({
+        relativePath: message.relativePath,
+        note: trimmed
+      });
+      setNoteTargetPath("");
+      setNoteBody("");
       setError("");
       await refreshMessages();
     } catch (actionError) {
@@ -1526,15 +1686,23 @@ export default function App() {
                     messages[column.key].map((message) => (
                       <MessageCard
                         activeAction={activeAction}
+                        isNoteOpen={noteTargetPath === message.relativePath}
                         isReplyOpen={replyTargetPath === message.relativePath}
                         key={message.relativePath}
                         lang={lang}
                         message={message}
                         onArchive={archiveInboxMessage}
+                        onCancelNote={cancelNote}
                         onCancelReply={cancelReply}
+                        onNoteBodyChange={setNoteBody}
+                        onOpenNote={openNote}
                         onOpenReply={openReply}
                         onReplyBodyChange={setReplyBody}
+                        onSendNote={sendNote}
                         onSendReply={sendReply}
+                        noteBody={
+                          noteTargetPath === message.relativePath ? noteBody : ""
+                        }
                         replyBody={
                           replyTargetPath === message.relativePath ? replyBody : ""
                         }

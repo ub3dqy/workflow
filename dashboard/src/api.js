@@ -62,3 +62,18 @@ export async function archiveMessage({ relativePath, resolution }) {
 
   return parseJsonResponse(response, `Archive API returned ${response.status}`);
 }
+
+export async function postNote({ relativePath, note }) {
+  const response = await fetch("/api/notes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      relativePath,
+      note
+    })
+  });
+
+  return parseJsonResponse(response, `Notes API returned ${response.status}`);
+}

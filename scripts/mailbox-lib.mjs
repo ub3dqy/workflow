@@ -197,6 +197,42 @@ export function validateRelativeInboxPath(relativePath, mailboxRoot) {
   };
 }
 
+export function validateRelativeMessagePath(relativePath, mailboxRoot) {
+  const trimmed = sanitizeString(relativePath).replace(/\\/g, "/");
+
+  if (!trimmed) {
+    throw new ClientError(400, "relativePath is required");
+  }
+
+  if (path.isAbsolute(trimmed) || trimmed.includes("..")) {
+    throw new ClientError(400, "relativePath must stay inside mailbox buckets");
+  }
+
+  if (
+    !trimmed.startsWith("to-claude/") &&
+    !trimmed.startsWith("to-codex/") &&
+    !trimmed.startsWith("archive/")
+  ) {
+    throw new ClientError(
+      400,
+      'relativePath must start with "to-claude/", "to-codex/", or "archive/"'
+    );
+  }
+
+  const resolvedPath = path.resolve(mailboxRoot, trimmed);
+  const mailboxPrefix = `${mailboxRoot}${path.sep}`;
+
+  if (!resolvedPath.startsWith(mailboxPrefix)) {
+    throw new ClientError(400, "relativePath escapes mailbox root");
+  }
+
+  return {
+    bucketName: trimmed.split("/", 1)[0],
+    relativePath: normalizePath(trimmed),
+    absolutePath: resolvedPath
+  };
+}
+
 export function validateResolution(resolution) {
   const nextResolution = sanitizeString(resolution) || "answered";
 
@@ -208,6 +244,51 @@ export function validateResolution(resolution) {
   }
 
   return nextResolution;
+}
+
+export async function appendNoteToMessageFile({
+  relativePath,
+  note,
+  mailboxRoot
+}) {
+  const { absolutePath, relativePath: normalizedPath } =
+    validateRelativeMessagePath(relativePath, mailboxRoot);
+  const trimmedNote = typeof note === "string" ? note.trim() : "";
+
+  if (!trimmedNote) {
+    throw new ClientError(400, "note is required");
+  }
+
+  if (trimmedNote.length > 4000) {
+    throw new ClientError(400, "note must be 4000 characters or fewer");
+  }
+
+  const raw = await fs.readFile(absolutePath, "utf8");
+  const parsed = matter(raw);
+  const existingContent = parsed.content.replace(/\s+$/, "");
+  const appendedAt = toUtcTimestamp();
+  const appendedBlock = [
+    "",
+    "",
+    "---",
+    "",
+    `**User note · ${appendedAt}**`,
+    "",
+    trimmedNote,
+    ""
+  ].join("\n");
+  const nextContent = existingContent + appendedBlock;
+
+  await fs.writeFile(
+    absolutePath,
+    matter.stringify(nextContent, parsed.data),
+    "utf8"
+  );
+
+  return {
+    relativePath: normalizePath(normalizedPath),
+    appendedAt
+  };
 }
 
 export async function collectMarkdownFiles(directory, recursive) {

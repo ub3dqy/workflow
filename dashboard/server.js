@@ -1,7 +1,8 @@
 import express from "express";
 import {
-  collectProjectValues,
   archiveMessageFile,
+  appendNoteToMessageFile,
+  collectProjectValues,
   ClientError,
   defaultMailboxRoot,
   filterMessagesByProject,
@@ -157,6 +158,39 @@ app.post("/api/archive", async (request, response) => {
 
     response.status(500).json({
       error: "Failed to archive message",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+app.post("/api/notes", async (request, response) => {
+  try {
+    const note = sanitizeString(request.body?.note);
+    const appended = await appendNoteToMessageFile({
+      relativePath: request.body?.relativePath,
+      note,
+      mailboxRoot
+    });
+
+    response.status(201).json({
+      ok: true,
+      relativePath: appended.relativePath,
+      appendedAt: appended.appendedAt
+    });
+  } catch (error) {
+    if (sendClientError(response, error)) {
+      return;
+    }
+
+    if (error && error.code === "ENOENT") {
+      response.status(404).json({
+        error: "Message file not found"
+      });
+      return;
+    }
+
+    response.status(500).json({
+      error: "Failed to append note",
       details: error instanceof Error ? error.message : String(error)
     });
   }
