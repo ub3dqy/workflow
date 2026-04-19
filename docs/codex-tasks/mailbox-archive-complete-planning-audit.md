@@ -131,6 +131,41 @@ Codex поймал ещё 3 blocker:
 
 ### Round 6 — pending Codex re-review
 
+### Round 7 — retrospective plan-audit skill (2026-04-19, post-commit)
+
+Plan executed in коммите `e4c3afb`; ретроспективная сверка через skill. Score: **10/10** ✅.
+
+| Измерение | Баллы |
+|---|---|
+| Точность ссылок | 2/2 |
+| Соответствие правилам | 2/2 |
+| Учёт blast radius | 2/2 |
+| Полнота шагов | 2/2 |
+| Реализуемость | 2/2 |
+
+**Верификация ссылок (12/12 pass):**
+
+| Ссылка в плане | Статус | Подтверждение в коде |
+|---|---|---|
+| `archiveMessageFile` signature +answeredAt | ✅ | `scripts/mailbox-lib.mjs:588` |
+| received_at backfill logic | ✅ | `scripts/mailbox-lib.mjs:632-634` |
+| answered_at conditional write (только answered) | ✅ | `scripts/mailbox-lib.mjs:642-646` |
+| readMessage читает answered_at | ✅ | `scripts/mailbox-lib.mjs:413-415` |
+| recoverOrphans передаёт answeredAt | ✅ | `scripts/mailbox-lib.mjs:733` |
+| handleReply passes answeredAt | ✅ | `scripts/mailbox.mjs:252` |
+| handleArchive schema +answered-at | ✅ | `scripts/mailbox.mjs:279` |
+| handleArchive guard | ✅ | `scripts/mailbox.mjs:293-298` |
+| usageText update | ✅ | `scripts/mailbox.mjs:110-111` |
+| /api/archive guard | ✅ | `dashboard/server.js:97,103` |
+| App.jsx новые translation keys | ✅ | 17 occurrences (V5 expected ≥10) |
+| spec обе секции | ✅ | `local-claude-codex-mailbox-workflow.md:326,332` |
+
+**Blast radius:** 4 caller архива (`handleReply` / `handleArchive` / `recoverOrphans` / `/api/archive`) все получили `answeredAt` prop или guard — симметрия закрыта в R3-R4. Whitelist из 5 файлов покрыл весь граф зависимостей.
+
+**Соответствие правилам:** rule #2 (three-file handoff), #3 (6 review rounds), #4 (PD scan V9 + CI fix `458552b`), #5 (no commit without user command, §14 явный), #8 (NO-STOP DISCIPLINE соблюдён в плане).
+
+**Findings:** 0 critical / 0 important / 0 optional. План выполнен без расхождений с baseline.
+
 ---
 
 ## §9 Delta from prior Tier
