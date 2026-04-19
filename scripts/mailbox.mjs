@@ -107,7 +107,8 @@ function usageText() {
     "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> --project <name> (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
     "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] --project <name> [--json]",
     "  node scripts/mailbox.mjs reply --from <user|claude|codex> --project <name> --to <relativePath> (--body <text> | --file <path>)",
-    "  node scripts/mailbox.mjs archive --path <relativePath> --project <name> [--resolution <answered|no-reply-needed|superseded>]",
+    "  node scripts/mailbox.mjs archive --path <relativePath> --project <name> [--resolution <answered|no-reply-needed|superseded>] [--answered-at <UTC ISO> --answer-message-id <id>]",
+    "    answered resolution requires --answered-at",
     "  node scripts/mailbox.mjs recover --project <name>"
   ].join("\n");
 }
@@ -247,7 +248,8 @@ async function handleReply(args) {
     relativePath: targetMessage.relativePath,
     resolution: "answered",
     mailboxRoot,
-    answerMessageId: created.id
+    answerMessageId: created.id,
+    answeredAt: created.created
   });
 
   if (options.json) {
@@ -274,6 +276,8 @@ async function handleArchive(args) {
     path: { type: "string" },
     project: { type: "string" },
     resolution: { type: "string" },
+    "answered-at": { type: "string" },
+    "answer-message-id": { type: "string" },
     json: { type: "boolean" }
   });
   const explicitProject = normalizeProject(options.project);
@@ -285,10 +289,21 @@ async function handleArchive(args) {
   }
   const targetMessage = await readMessageByRelativePath(options.path, mailboxRoot);
   validateProjectScope(explicitProject, targetMessage);
+  const nextResolution = validateResolution(options.resolution);
+  const nextAnsweredAt = sanitizeString(options["answered-at"]);
+  const nextAnswerMessageId = sanitizeString(options["answer-message-id"]);
+  if (nextResolution === "answered" && !nextAnsweredAt) {
+    throw new ClientError(
+      64,
+      "--answered-at is required when --resolution=answered (archive timeline completeness)"
+    );
+  }
   const archived = await archiveMessageFile({
     relativePath: options.path,
-    resolution: validateResolution(options.resolution),
-    mailboxRoot
+    resolution: nextResolution,
+    mailboxRoot,
+    answeredAt: nextAnsweredAt,
+    answerMessageId: nextAnswerMessageId
   });
 
   if (options.json) {

@@ -323,6 +323,24 @@ Concurrent agent readers: best-effort без lock. First writer wins, второ
 
 Dashboard UI показывает все три timestamps на каждой карточке с localized labels (Отправлено / Получено / Архивировано).
 
+### answered_at timestamp field
+
+Frontmatter может содержать дополнительное поле `answered_at` — timestamp создания reply-сообщения, которое закрыло текущее (UTC ISO). **Populated только** когда message архивируется как часть reply flow (resolution=answered). Для `no-reply-needed` и `superseded` резолюций поле НЕ создаётся.
+
+Это позволяет archive-карточкам показывать отдельную строку «Ответ отправлен» в timeline, не смешивая с моментом собственно архивирования.
+
+### Archive timeline completeness
+
+При архивировании `archiveMessageFile` применяет **backfill rule**: если `received_at` отсутствует в исходном message (message был архивирован без предыдущего agent read — например, через dashboard непосредственно), устанавливает `received_at = archived_at`. Это гарантирует, что все archived messages имеют полную timeline (Отправлено / Получено / опционально Ответ отправлен / Отправлено в архив) без пропущенных полей.
+
+Resolution values остаются семантическими:
+
+- `answered` — был отправлен ответ (имеет `answered_at` + `answer_message_id`);
+- `no-reply-needed` — закрыто без ответа (нет `answered_at`);
+- `superseded` — заменено новым message (нет `answered_at`).
+
+UI показывает resolution как отдельный status chip в header карточки, не заменяя при этом event timestamps.
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:

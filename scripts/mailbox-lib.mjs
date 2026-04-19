@@ -410,6 +410,9 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
       typeof parsed.data.answer_message_id === "string"
         ? parsed.data.answer_message_id
         : "",
+    answered_at: toMessageTimestamp({
+      data: { created: parsed.data.answered_at }
+    }),
     related_files: relatedFiles,
     body,
     html: body ? String(marked.parse(body)) : "",
@@ -572,7 +575,8 @@ export async function generateMessageFile({
     to: nextTarget,
     from: nextFrom,
     thread: nextThread,
-    project: nextProject
+    project: nextProject,
+    created
   };
 }
 
@@ -581,6 +585,7 @@ export async function archiveMessageFile({
   resolution,
   mailboxRoot,
   answerMessageId = "",
+  answeredAt = "",
   archiveFiles
 }) {
   const { absolutePath, relativePath: normalizedPath } =
@@ -616,16 +621,28 @@ export async function archiveMessageFile({
   const archiveDirPath = path.join(mailboxRoot, "archive", thread);
   const archivedPath = path.join(archiveDirPath, filename);
   const archiveRelativePath = normalizePath(path.relative(mailboxRoot, archivedPath));
+  const archivedAt = toUtcTimestamp();
   const updatedData = {
     ...parsed.data,
     status: "archived",
-    archived_at: toUtcTimestamp(),
+    archived_at: archivedAt,
     resolution: validateResolution(resolution)
   };
+
+  if (!("received_at" in parsed.data) || !parsed.data.received_at) {
+    updatedData.received_at = archivedAt;
+  }
+
   const nextAnswerMessageId = sanitizeString(answerMessageId);
 
   if (nextAnswerMessageId) {
     updatedData.answer_message_id = nextAnswerMessageId;
+  }
+
+  const nextAnsweredAt = sanitizeString(answeredAt);
+
+  if (nextAnsweredAt && updatedData.resolution === "answered") {
+    updatedData.answered_at = nextAnsweredAt;
   }
 
   const nextContent = toMailboxContent(parsed.content);
@@ -712,7 +729,8 @@ export async function recoverOrphans(mailboxRoot) {
       relativePath: message.relativePath,
       resolution: "answered",
       mailboxRoot,
-      answerMessageId: matchingReply.id
+      answerMessageId: matchingReply.id,
+      answeredAt: matchingReply.created
     });
 
     recovered.push({

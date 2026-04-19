@@ -94,10 +94,22 @@ app.post("/api/archive", async (request, response) => {
       mailboxRoot
     ).relativePath;
     const resolution = validateResolution(request.body?.resolution);
+    const answeredAt = sanitizeString(request.body?.answered_at);
+    const answerMessageId = sanitizeString(request.body?.answer_message_id);
+
+    if (resolution === "answered" && !answeredAt) {
+      throw new ClientError(
+        400,
+        "answered_at is required when resolution=answered (archive timeline completeness)"
+      );
+    }
+
     const archived = await archiveMessageFile({
       relativePath,
       resolution,
-      mailboxRoot
+      mailboxRoot,
+      answeredAt,
+      answerMessageId
     });
 
     response.json({

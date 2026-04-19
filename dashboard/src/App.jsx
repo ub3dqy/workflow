@@ -34,7 +34,11 @@ const translations = {
     noTimestamp: "Нет даты",
     timestampSent: "Отправлено",
     timestampReceived: "Получено",
-    timestampCompleted: "Выполнено",
+    timestampAnswered: "Ответ отправлен",
+    timestampArchived: "Отправлено в архив",
+    statusAnswered: "Выполнено",
+    statusNoReplyNeeded: "Закрыто без ответа",
+    statusSuperseded: "Заменено",
     archiveButton: "Архивировать",
     archiving: "Архивирование...",
     sending: "Отправка...",
@@ -90,7 +94,11 @@ const translations = {
     noTimestamp: "No timestamp",
     timestampSent: "Sent",
     timestampReceived: "Received",
-    timestampCompleted: "Completed",
+    timestampAnswered: "Replied at",
+    timestampArchived: "Archived at",
+    statusAnswered: "Completed",
+    statusNoReplyNeeded: "Closed without reply",
+    statusSuperseded: "Superseded",
     archiveButton: "Archive",
     archiving: "Archiving...",
     sending: "Sending...",
@@ -1046,7 +1054,13 @@ function MessageCard({
           <div className="cardTags">
             {isArchived ? (
               <span className="chip">
-                {message.resolution || message.status || "archived"}
+                {message.resolution === "answered"
+                  ? t.statusAnswered
+                  : message.resolution === "no-reply-needed"
+                    ? t.statusNoReplyNeeded
+                    : message.resolution === "superseded"
+                      ? t.statusSuperseded
+                      : message.resolution || message.status || "archived"}
               </span>
             ) : null}
             {message.project ? (
@@ -1063,9 +1077,15 @@ function MessageCard({
             <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
             {formatTimestamp(message.received_at || message.created, lang, t)}
           </span>
+          {message.answered_at ? (
+            <span className="timestamp">
+              <span className="timestampLabel">{t.timestampAnswered}:</span>{" "}
+              {formatTimestamp(message.answered_at, lang, t)}
+            </span>
+          ) : null}
           {message.metadata?.archived_at ? (
             <span className="timestamp">
-              <span className="timestampLabel">{t.timestampCompleted}:</span>{" "}
+              <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
               {formatTimestamp(message.metadata.archived_at, lang, t)}
             </span>
           ) : null}
