@@ -341,6 +341,25 @@ Resolution values остаются семантическими:
 
 UI показывает resolution как отдельный status chip в header карточки, не заменяя при этом event timestamps.
 
+### Phase B — Session lifecycle hooks (Claude)
+
+Claude Code автоматически регистрирует свою session в supervisor через hook chain:
+
+- **`SessionStart`** → POST `/api/runtime/sessions` с `{session_id, agent:"claude", project, cwd, transport:"claude-hooks", platform:"windows|linux|wsl"}`. Project приходит **только** из explicit `--project <name>` CLI flag в hook command в `.claude/settings.local.json` (per-repo opt-in; соответствует spec L306 — agent session project = explicit bound flag, никогда cwd). Missing flag → script silently exits (no registration). Регистрация fires сразу после старта сессии.
+- **`Stop`** → тот же POST (upsert via session_id). Refresh `last_seen` → session остаётся «активной» в dashboard. Каждый end-of-turn обновляет heartbeat.
+- Если dashboard down — hook silently fails (exit 0, stderr warning в transcript). Agent session не ломается.
+- Session auto-expires через 60s TTL если heartbeat не приходит. Это чище чем DELETE на Stop: end-of-turn ≠ end-of-session.
+
+**Codex hooks**:
+- **Linux/WSL Codex**: equivalent scripts появятся в отдельном handoff если/когда OpenAI ships cross-platform hooks support.
+- **Windows native Codex**: **degraded**. Autoregistration unsupported; user может вручную вызвать `curl -X POST ...` для session record.
+
+**Scope boundaries**:
+- Hook scripts **only** POST session — не читают mail, не исполняют письма, не spawn-ят heavy processes.
+- Delivery signals + continuation prompts — отдельная следующая фаза.
+- Lease/claim multi-window protection — отдельная следующая фаза.
+- `UserPromptSubmit` **не используется**.
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:
