@@ -55,6 +55,7 @@
 5. **No commit/push/merge without explicit user command.** `pr`, `commit`, `merge` — только по команде.
 6. **Don't ask when task is clear.** Чёткая команда = выполнять, не переспрашивать.
 7. **Discrepancy → stop → wait.** Если реальность ≠ план, остановись и зафиксируй. Не продолжай вслепую.
+8. **NO-STOP DISCIPLINE during plan creation.** После получения go на handoff (user «да» OR Codex approves TZ через active delegation) и до отправки плана Codex'у на adversarial review — **ни одной остановки**. Audit findings применяются inline автоматически, audit-loop прогоняется до 10/10 без остановок, Codex adversarial findings тоже fix+reply без пауз, delivery к Codex'у sent **без спроса user'а**. Stop ТОЛЬКО при: user explicit stop команде / commit-push команде / discrepancy требующей scope decision / cross-project bleed. Full rule + examples: `C:\Users\<user>\.claude\projects\E--Project-workflow\memory\feedback_no_stop_during_plan.md` + `E:/Project/memory claude/memory claude/docs/claude-plan-creation-procedure.md §"NO-STOP DISCIPLINE"`.
 
 ## Mailbox protocol
 
