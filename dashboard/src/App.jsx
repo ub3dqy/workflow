@@ -604,6 +604,7 @@ const styles = `
     gap: 14px;
     padding: 16px;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
     min-height: 0;
   }
@@ -679,11 +680,13 @@ const styles = `
   }
 
   .cardTimestamps {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    align-items: flex-end;
-    flex-shrink: 0;
+    display: grid;
+    gap: 4px;
+    margin: 10px 0 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--surface-control);
+    border: 1px solid var(--border-subtle);
     font-size: 12px;
     color: var(--text-muted);
   }
@@ -762,6 +765,8 @@ const styles = `
     border-top: 1px solid var(--border-subtle);
     color: var(--text-strong);
     line-height: 1.6;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .body :first-child {
@@ -770,6 +775,19 @@ const styles = `
 
   .body :last-child {
     margin-bottom: 0;
+  }
+
+  .body p,
+  .body li {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .body pre,
+  .body code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .actionRow {
@@ -880,6 +898,15 @@ const styles = `
     .hero {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    .cardHeader {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .cardTimestamps {
+      align-items: flex-start;
     }
 
     .toolbar {
@@ -1068,28 +1095,6 @@ function MessageCard({
             ) : null}
           </div>
         </div>
-        <div className="cardTimestamps">
-          <span className="timestamp">
-            <span className="timestampLabel">{t.timestampSent}:</span>{" "}
-            {formatTimestamp(message.created, lang, t)}
-          </span>
-          <span className="timestamp">
-            <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
-            {formatTimestamp(message.received_at || message.created, lang, t)}
-          </span>
-          {message.answered_at ? (
-            <span className="timestamp">
-              <span className="timestampLabel">{t.timestampAnswered}:</span>{" "}
-              {formatTimestamp(message.answered_at, lang, t)}
-            </span>
-          ) : null}
-          {message.metadata?.archived_at ? (
-            <span className="timestamp">
-              <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
-              {formatTimestamp(message.metadata.archived_at, lang, t)}
-            </span>
-          ) : null}
-        </div>
       </header>
 
       <p className="cardMeta">
@@ -1109,6 +1114,29 @@ function MessageCard({
       </p>
 
       <p className="cardFilename mono">{message.relativePath}</p>
+
+      <div className="cardTimestamps">
+        <span className="timestamp">
+          <span className="timestampLabel">{t.timestampSent}:</span>{" "}
+          {formatTimestamp(message.created, lang, t)}
+        </span>
+        <span className="timestamp">
+          <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
+          {formatTimestamp(message.received_at || message.created, lang, t)}
+        </span>
+        {message.answered_at ? (
+          <span className="timestamp">
+            <span className="timestampLabel">{t.timestampAnswered}:</span>{" "}
+            {formatTimestamp(message.answered_at, lang, t)}
+          </span>
+        ) : null}
+        {message.metadata?.archived_at ? (
+          <span className="timestamp">
+            <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
+            {formatTimestamp(message.metadata.archived_at, lang, t)}
+          </span>
+        ) : null}
+      </div>
 
       {message.related_files.length > 0 ? (
         <div className="relatedFiles">

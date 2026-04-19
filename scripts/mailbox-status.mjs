@@ -52,6 +52,42 @@ function toHostPath(rawCwd) {
   return trimmed;
 }
 
+function normalizeProject(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().replace(/^['"]|['"]$/g, "");
+}
+
+function inferProjectFromCwd(cwd) {
+  const nextCwd = toHostPath(cwd) || process.cwd();
+  return normalizeProject(path.basename(path.resolve(nextCwd)));
+}
+
+async function findProjectRoot(startCwd) {
+  let current = path.resolve(toHostPath(startCwd) || process.cwd());
+
+  while (true) {
+    try {
+      await fs.access(path.join(current, "agent-mailbox"));
+      return current;
+    } catch (error) {
+      if (!error || error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    const parent = path.dirname(current);
+
+    if (parent === current) {
+      return "";
+    }
+
+    current = parent;
+  }
+}
+
 async function readHookCwd() {
   const rawStdin = await readStdin();
 
@@ -168,39 +204,49 @@ function buildSummary({ toClaudeFiles, toCodexFiles, previews }) {
 async function main() {
   try {
     const cwd = await readHookCwd();
-    const mailboxRoot = path.resolve(cwd, "agent-mailbox");
-    const toClaudeFiles = await listMarkdownFiles(path.join(mailboxRoot, "to-claude"));
-    const toCodexFiles = await listMarkdownFiles(path.join(mailboxRoot, "to-codex"));
+    const projectRoot = await findProjectRoot(cwd);
 
-    if (toClaudeFiles.length === 0 && toCodexFiles.length === 0) {
+    if (!projectRoot) {
       return;
     }
 
-    const previewCandidates = [
-      ...toClaudeFiles.slice(0, PREVIEW_LIMIT).map((filename) => ({
-        bucketName: "to-claude",
-        filename
-      })),
-      ...toCodexFiles.slice(0, PREVIEW_LIMIT).map((filename) => ({
-        bucketName: "to-codex",
-        filename
-      }))
-    ]
+    const currentProject = inferProjectFromCwd(projectRoot);
+    const mailboxRoot = path.join(projectRoot, "agent-mailbox");
+    const toClaudeFiles = await listMarkdownFiles(path.join(mailboxRoot, "to-claude"));
+    const toCodexFiles = await listMarkdownFiles(path.join(mailboxRoot, "to-codex"));
+    const [toClaudeSummaries, toCodexSummaries] = await Promise.all([
+      Promise.all(
+        toClaudeFiles.map((filename) =>
+          readMessageSummary(mailboxRoot, "to-claude", filename)
+        )
+      ),
+      Promise.all(
+        toCodexFiles.map((filename) =>
+          readMessageSummary(mailboxRoot, "to-codex", filename)
+        )
+      )
+    ]);
+    const scopedToClaude = toClaudeSummaries.filter(
+      (message) => normalizeProject(message.project) === currentProject
+    );
+    const scopedToCodex = toCodexSummaries.filter(
+      (message) => normalizeProject(message.project) === currentProject
+    );
+
+    if (scopedToClaude.length === 0 && scopedToCodex.length === 0) {
+      return;
+    }
+
+    const previews = [...scopedToClaude, ...scopedToCodex]
       .sort((left, right) => right.filename.localeCompare(left.filename))
       .slice(0, PREVIEW_LIMIT);
-
-    const previews = await Promise.all(
-      previewCandidates.map(({ bucketName, filename }) =>
-        readMessageSummary(mailboxRoot, bucketName, filename)
-      )
-    );
 
     const output = {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext: buildSummary({
-          toClaudeFiles,
-          toCodexFiles,
+          toClaudeFiles: scopedToClaude,
+          toCodexFiles: scopedToCodex,
           previews
         })
       }
