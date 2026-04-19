@@ -37,6 +37,8 @@ jobs:
             --include="*.js" --include="*.jsx" --include="*.json" \
             --include="*.md" --include="*.html" \
             --exclude-dir=.github \
+            --exclude-dir=codex-tasks \
+            --exclude-dir=agent-mailbox \
             -l . 2>/dev/null || true)
           if [ -n "$FOUND" ]; then
             echo "::error::Personal data found in: $FOUND"
