@@ -462,6 +462,30 @@ export function threadExists(thread, messages) {
   return messages.some((message) => message.thread === thread);
 }
 
+export async function markMessageReceived(filePath) {
+  const raw = await fs.readFile(filePath, "utf8");
+  const parsed = matter(raw);
+
+  if ("received_at" in parsed.data) {
+    return { mutated: false };
+  }
+
+  parsed.data.received_at = toUtcTimestamp();
+  const tmpPath = `${filePath}.tmp`;
+
+  await fs.writeFile(
+    tmpPath,
+    matter.stringify(parsed.content, parsed.data),
+    "utf8"
+  );
+  await fs.rename(tmpPath, filePath);
+
+  return {
+    mutated: true,
+    received_at: parsed.data.received_at
+  };
+}
+
 export async function nextSequenceForThreadFrom(
   thread,
   from,
@@ -527,8 +551,7 @@ export async function generateMessageFile({
     from: nextFrom,
     to: nextTarget,
     status: "pending",
-    created,
-    received_at: created
+    created
   };
 
   if (nextReplyTo) {

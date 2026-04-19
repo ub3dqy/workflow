@@ -310,10 +310,16 @@ Canonical source текущего project для agent session = explicit bound 
 Frontmatter содержит три timestamp field:
 
 - `created` — writer-side отправка (sender's clock, UTC ISO);
-- `received_at` — recipient-side первое принятие сообщения mailbox infrastructure (UTC ISO);
+- `received_at` — timestamp первого принятия (чтения) сообщения получающим агентом (UTC ISO); **populated on first agent read**, не на generation.
 - `archived_at` — момент архивирования (UTC ISO, добавляется при move в archive).
 
-Для legacy messages без `received_at` reader обеспечивает fallback `received_at = created`. Новые messages пишут `received_at` явно во frontmatter; в current file-based режиме без отдельного delivery layer writer initially sets `received_at = created`. Schema подготовлена для later delivery-layer expansion (Phase C supervisor handoff populates `received_at` = supervisor polling moment).
+Writer (sender) создаёт message **без** поля `received_at`. Receiving agent при первом чтении через agent-path (`/api/agent/*`, `mailbox.mjs list --project <name>`, `mailbox.mjs reply`) проверяет отсутствие `received_at` и populates с текущим UTC timestamp, atomic write-back (writeFile tmp + rename). Последующие чтения skip mutation (field present).
+
+User dashboard path (`/api/messages`) не populates — user visibility не является «agent received» event.
+
+Concurrent agent readers: best-effort без lock. First writer wins, второй reader видит populated field и пропускает mutation. Overwrite risk нулевой — оба timestamp'а близки по ms resolution.
+
+Для legacy messages без `received_at` reader возвращает fallback = `created` при reading (не mutates).
 
 Dashboard UI показывает все три timestamps на каждой карточке с localized labels (Отправлено / Получено / Архивировано).
 

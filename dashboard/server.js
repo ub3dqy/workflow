@@ -1,4 +1,5 @@
 import express from "express";
+import path from "node:path";
 import {
   archiveMessageFile,
   appendNoteToMessageFile,
@@ -8,6 +9,7 @@ import {
   filterMessagesByProject,
   host,
   isKnownBucket,
+  markMessageReceived,
   normalizeProject,
   port,
   readBucket,
@@ -177,6 +179,14 @@ agentRouter.get("/messages", async (request, response) => {
     const toClaude = filterMessagesByProject(allToClaude, request.agentProject);
     const toCodex = filterMessagesByProject(allToCodex, request.agentProject);
     const archive = filterMessagesByProject(allArchive, request.agentProject);
+    const toMark = [...toClaude, ...toCodex].filter(
+      (message) => message.status === "pending"
+    );
+    await Promise.all(
+      toMark.map((message) =>
+        markMessageReceived(path.resolve(mailboxRoot, message.relativePath))
+      )
+    );
     response.json({ toClaude, toCodex, archive, project: request.agentProject });
   } catch (error) {
     response.status(500).json({

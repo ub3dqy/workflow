@@ -34,7 +34,7 @@ const translations = {
     noTimestamp: "Нет даты",
     timestampSent: "Отправлено",
     timestampReceived: "Получено",
-    timestampArchived: "Архивировано",
+    timestampCompleted: "Выполнено",
     archiveButton: "Архивировать",
     archiving: "Архивирование...",
     sending: "Отправка...",
@@ -90,7 +90,7 @@ const translations = {
     noTimestamp: "No timestamp",
     timestampSent: "Sent",
     timestampReceived: "Received",
-    timestampArchived: "Archived",
+    timestampCompleted: "Completed",
     archiveButton: "Archive",
     archiving: "Archiving...",
     sending: "Sending...",
@@ -1065,7 +1065,7 @@ function MessageCard({
           </span>
           {message.metadata?.archived_at ? (
             <span className="timestamp">
-              <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
+              <span className="timestampLabel">{t.timestampCompleted}:</span>{" "}
               {formatTimestamp(message.metadata.archived_at, lang, t)}
             </span>
           ) : null}

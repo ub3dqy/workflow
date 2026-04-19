@@ -9,6 +9,7 @@ import {
   filterMessagesByProject,
   generateMessageFile,
   getReplyTargetForMessage,
+  markMessageReceived,
   normalizeProject,
   normalizePath,
   readMessageByRelativePath,
@@ -179,6 +180,16 @@ async function handleList(args) {
       : messages.filter((message) => message.bucket === bucket);
   const filtered = filterMessagesByProject(filteredByBucket, project);
 
+  for (const msg of filtered) {
+    if (
+      msg.status === "pending" &&
+      (msg.bucket === "to-claude" || msg.bucket === "to-codex")
+    ) {
+      const abs = path.resolve(mailboxRoot, msg.relativePath);
+      await markMessageReceived(abs);
+    }
+  }
+
   if (
     bucket !== "all" &&
     filteredByBucket.length === 0 &&
@@ -217,6 +228,8 @@ async function handleReply(args) {
   }
   const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot);
   validateProjectScope(explicitProject, targetMessage);
+  const location = path.resolve(mailboxRoot, targetMessage.relativePath);
+  await markMessageReceived(location);
   const body = await readBody(options);
   const to = getReplyTargetForMessage(targetMessage, from);
   const messages = await collectMailboxMessages(mailboxRoot);
