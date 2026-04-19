@@ -27,4 +27,8 @@ if "!NEED_INSTALL!"=="1" (
   copy /y package-lock.json "%STAMP%" >nul
 )
 
-call npm run dev
+echo Building dashboard...
+call npm run build
+if errorlevel 1 exit /b 1
+
+call npm run serve

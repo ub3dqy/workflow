@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "concurrently \"node server.js\" \"vite\"",
     "server": "node server.js",
-    "build": "vite build"
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 9119 --strictPort",
+    "serve": "concurrently \"node server.js\" \"npm run preview\""
   },
   "engines": {
     "node": ">=20.19"
