@@ -12,6 +12,7 @@ import {
   port,
   readBucket,
   sanitizeString,
+  validateProjectScope,
   validateRelativeInboxPath,
   validateResolution
 } from "../scripts/mailbox-lib.mjs";
@@ -153,6 +154,39 @@ app.post("/api/notes", async (request, response) => {
     });
   }
 });
+
+const agentRouter = express.Router();
+
+agentRouter.use((request, response, next) => {
+  const project = normalizeProject(request.query.project || request.body?.project);
+  if (!project) {
+    response.status(400).json({ error: "project query/body param is required for /api/agent/*" });
+    return;
+  }
+  request.agentProject = project;
+  next();
+});
+
+agentRouter.get("/messages", async (request, response) => {
+  try {
+    const [allToClaude, allToCodex, allArchive] = await Promise.all([
+      readBucket("to-claude", mailboxRoot),
+      readBucket("to-codex", mailboxRoot),
+      readBucket("archive", mailboxRoot)
+    ]);
+    const toClaude = filterMessagesByProject(allToClaude, request.agentProject);
+    const toCodex = filterMessagesByProject(allToCodex, request.agentProject);
+    const archive = filterMessagesByProject(allArchive, request.agentProject);
+    response.json({ toClaude, toCodex, archive, project: request.agentProject });
+  } catch (error) {
+    response.status(500).json({
+      error: "Failed to read agent mailbox",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+app.use("/api/agent", agentRouter);
 
 app.listen(port, host, () => {
   console.log(`Server listening on ${host}:${port}`);

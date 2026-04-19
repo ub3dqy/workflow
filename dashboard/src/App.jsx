@@ -32,6 +32,9 @@ const translations = {
     loading: "Загрузка...",
     noMessages: "Нет сообщений.",
     noTimestamp: "Нет даты",
+    timestampSent: "Отправлено",
+    timestampReceived: "Получено",
+    timestampArchived: "Архивировано",
     archiveButton: "Архивировать",
     archiving: "Архивирование...",
     sending: "Отправка...",
@@ -85,6 +88,9 @@ const translations = {
     loading: "Loading mailbox state...",
     noMessages: "No messages in this bucket yet.",
     noTimestamp: "No timestamp",
+    timestampSent: "Sent",
+    timestampReceived: "Received",
+    timestampArchived: "Archived",
     archiveButton: "Archive",
     archiving: "Archiving...",
     sending: "Sending...",
@@ -664,6 +670,21 @@ const styles = `
     color: var(--text-muted);
   }
 
+  .cardTimestamps {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .timestampLabel {
+    font-weight: 700;
+    color: var(--text-accent);
+  }
+
   .cardMeta {
     margin: 0 0 6px;
     display: flex;
@@ -1033,7 +1054,22 @@ function MessageCard({
             ) : null}
           </div>
         </div>
-        <div className="timestamp">{formatTimestamp(message.created, lang, t)}</div>
+        <div className="cardTimestamps">
+          <span className="timestamp">
+            <span className="timestampLabel">{t.timestampSent}:</span>{" "}
+            {formatTimestamp(message.created, lang, t)}
+          </span>
+          <span className="timestamp">
+            <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
+            {formatTimestamp(message.received_at || message.created, lang, t)}
+          </span>
+          {message.metadata?.archived_at ? (
+            <span className="timestamp">
+              <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
+              {formatTimestamp(message.metadata.archived_at, lang, t)}
+            </span>
+          ) : null}
+        </div>
       </header>
 
       <p className="cardMeta">

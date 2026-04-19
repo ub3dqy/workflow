@@ -292,6 +292,31 @@ related_files:
 - `archived_at` — timestamp переноса в archive
 - `resolution` — например `answered`, `no-reply-needed`, `superseded`
 
+### Project field is mandatory
+
+Для agent-path operations поле `project` обязательно:
+
+- все agent-authored messages **должны** иметь `project` во frontmatter;
+- agent CLI команды (`send`, `list`, `reply`, `archive`, `recover`) требуют явного `--project` флага;
+- cwd-basename autodetect как project source **удалён** из agent flow;
+- отсутствие project = validation error (400 / ClientError), не runtime branch.
+
+Dashboard user-facing endpoints (`/api/messages`) остаются multi-project (user видит все проекты). Agent-facing endpoints (`/api/agent/*`) требуют mandatory `project` query param; cross-project access из agent-path запрещён.
+
+Canonical source текущего project для agent session = explicit bound project через CLI flag или API param, никогда не cwd.
+
+### `received_at` timestamp field
+
+Frontmatter содержит три timestamp field:
+
+- `created` — writer-side отправка (sender's clock, UTC ISO);
+- `received_at` — recipient-side первое принятие сообщения mailbox infrastructure (UTC ISO);
+- `archived_at` — момент архивирования (UTC ISO, добавляется при move в archive).
+
+Для legacy messages без `received_at` reader обеспечивает fallback `received_at = created`. Новые messages пишут `received_at` явно во frontmatter; в current file-based режиме без отдельного delivery layer writer initially sets `received_at = created`. Schema подготовлена для later delivery-layer expansion (Phase C supervisor handoff populates `received_at` = supervisor polling moment).
+
+Dashboard UI показывает все три timestamps на каждой карточке с localized labels (Отправлено / Получено / Архивировано).
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:

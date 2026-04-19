@@ -63,6 +63,31 @@ export function normalizeProject(project) {
   return sanitizeString(project);
 }
 
+export function validateProjectScope(currentProject, message) {
+  const nextCurrent = normalizeProject(currentProject);
+
+  if (!nextCurrent) {
+    throw new ClientError(400, "project is required for agent-path operations");
+  }
+
+  const messageProject = normalizeProject(message?.project);
+
+  if (!messageProject) {
+    throw new ClientError(400, "target message has no project — cannot validate scope");
+  }
+
+  if (nextCurrent !== messageProject) {
+    throw new ClientError(
+      400,
+      `project scope mismatch: agent bound to "${nextCurrent}", message belongs to "${messageProject}"`
+    );
+  }
+
+  return {
+    project: nextCurrent
+  };
+}
+
 export function toSortValue(created) {
   if (typeof created !== "string" || created.length === 0) {
     return 0;
@@ -377,6 +402,9 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
     resolution:
       typeof parsed.data.resolution === "string" ? parsed.data.resolution : "",
     created,
+    received_at: toMessageTimestamp({
+      data: { created: parsed.data.received_at ?? parsed.data.created }
+    }),
     reply_to: typeof parsed.data.reply_to === "string" ? parsed.data.reply_to : "",
     answer_message_id:
       typeof parsed.data.answer_message_id === "string"
@@ -499,7 +527,8 @@ export async function generateMessageFile({
     from: nextFrom,
     to: nextTarget,
     status: "pending",
-    created
+    created,
+    received_at: created
   };
 
   if (nextReplyTo) {
@@ -666,7 +695,8 @@ export async function recoverOrphans(mailboxRoot) {
     recovered.push({
       relativePath: message.relativePath,
       archivedTo: archived.archivedTo,
-      answerMessageId: matchingReply.id
+      answerMessageId: matchingReply.id,
+      project: message.project || ""
     });
   }
 

@@ -15,6 +15,7 @@ import {
   recoverOrphans,
   sanitizeString,
   threadExists,
+  validateProjectScope,
   validateResolution,
   validateSender,
   validateThread
@@ -102,11 +103,11 @@ function formatTable(messages) {
 function usageText() {
   return [
     "Usage:",
-    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> [--project <name> | auto=basename(cwd)] (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
-    "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] [--project <name>] [--json]",
-    "  node scripts/mailbox.mjs reply --from <user|claude|codex> --to <relativePath> (--body <text> | --file <path>)",
-    "  node scripts/mailbox.mjs archive --path <relativePath> [--resolution <answered|no-reply-needed|superseded>]",
-    "  node scripts/mailbox.mjs recover"
+    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> --project <name> (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
+    "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] --project <name> [--json]",
+    "  node scripts/mailbox.mjs reply --from <user|claude|codex> --project <name> --to <relativePath> (--body <text> | --file <path>)",
+    "  node scripts/mailbox.mjs archive --path <relativePath> --project <name> [--resolution <answered|no-reply-needed|superseded>]",
+    "  node scripts/mailbox.mjs recover --project <name>"
   ].join("\n");
 }
 
@@ -124,8 +125,13 @@ async function handleSend(args) {
   });
   const from = validateSender(options.from);
   const thread = validateThread(options.thread);
-  const explicitProject = normalizeProject(options.project);
-  const project = explicitProject || path.basename(process.cwd());
+  const project = normalizeProject(options.project);
+  if (!project) {
+    throw new ClientError(
+      64,
+      "--project is required (agent-path isolation); cwd autodetect removed per ТЗ"
+    );
+  }
   const body = await readBody(options);
   const messages = await collectMailboxMessages(mailboxRoot);
 
@@ -160,6 +166,12 @@ async function handleList(args) {
   });
   const bucket = sanitizeString(options.bucket) || "all";
   const project = normalizeProject(options.project);
+  if (!project) {
+    throw new ClientError(
+      64,
+      "--project is required (agent-path list must be scoped to one project)"
+    );
+  }
   const messages = await collectMailboxMessages(mailboxRoot);
   const filteredByBucket =
     bucket === "all"
@@ -190,12 +202,21 @@ async function handleReply(args) {
   const options = parseOptions(args, {
     to: { type: "string" },
     from: { type: "string" },
+    project: { type: "string" },
     body: { type: "string" },
     file: { type: "string" },
     json: { type: "boolean" }
   });
   const from = validateSender(options.from);
+  const explicitProject = normalizeProject(options.project);
+  if (!explicitProject) {
+    throw new ClientError(
+      64,
+      "--project is required (reply must stay within agent session project)"
+    );
+  }
   const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot);
+  validateProjectScope(explicitProject, targetMessage);
   const body = await readBody(options);
   const to = getReplyTargetForMessage(targetMessage, from);
   const messages = await collectMailboxMessages(mailboxRoot);
@@ -238,9 +259,19 @@ async function handleReply(args) {
 async function handleArchive(args) {
   const options = parseOptions(args, {
     path: { type: "string" },
+    project: { type: "string" },
     resolution: { type: "string" },
     json: { type: "boolean" }
   });
+  const explicitProject = normalizeProject(options.project);
+  if (!explicitProject) {
+    throw new ClientError(
+      64,
+      "--project is required (archive scoped to single project)"
+    );
+  }
+  const targetMessage = await readMessageByRelativePath(options.path, mailboxRoot);
+  validateProjectScope(explicitProject, targetMessage);
   const archived = await archiveMessageFile({
     relativePath: options.path,
     resolution: validateResolution(options.resolution),
@@ -257,9 +288,20 @@ async function handleArchive(args) {
 
 async function handleRecover(args) {
   const options = parseOptions(args, {
+    project: { type: "string" },
     json: { type: "boolean" }
   });
-  const recovered = await recoverOrphans(mailboxRoot);
+  const project = normalizeProject(options.project);
+  if (!project) {
+    throw new ClientError(
+      64,
+      "--project is required (recover scoped to single project)"
+    );
+  }
+  const allRecovered = await recoverOrphans(mailboxRoot);
+  const recovered = allRecovered.filter((item) => {
+    return item.project === project;
+  });
 
   if (options.json) {
     console.log(JSON.stringify(recovered, null, 2));
