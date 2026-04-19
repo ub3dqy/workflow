@@ -1,5 +1,6 @@
 # Mailbox is local working memory, not a project artifact.
 agent-mailbox/
+mailbox-runtime/
 
 # Dependencies
 node_modules/

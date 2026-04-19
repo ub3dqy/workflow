@@ -1,5 +1,10 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { archiveMessage, fetchMessages, postNote } from "./api.js";
+import {
+  archiveMessage,
+  fetchMessages,
+  fetchRuntimeState,
+  postNote
+} from "./api.js";
 
 const pollIntervalMs = 3000;
 const emptyData = {
@@ -67,7 +72,13 @@ const translations = {
       "Заметка дописывается в конец сообщения как user-блок. Оригинальное сообщение агента не редактируется.",
     sendNote: "Сохранить заметку",
     noteBodyError: "Текст заметки обязателен.",
-    noteTooLong: "Заметка не может превышать 4000 символов."
+    noteTooLong: "Заметка не может превышать 4000 символов.",
+    activeSessionsTitle: "Активные сессии",
+    noActiveSessions: "Нет активных сессий.",
+    pendingIndexTitle: "Незабранные сообщения",
+    noPendingMessages: "Нет pending-сообщений.",
+    supervisorHealthLabel: "Supervisor",
+    supervisorLastTick: "Последний цикл"
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -127,7 +138,13 @@ const translations = {
       "Notes are appended to the end of the message as a user block. The original agent message is not edited.",
     sendNote: "Save note",
     noteBodyError: "Note body is required.",
-    noteTooLong: "Note must be 4000 characters or fewer."
+    noteTooLong: "Note must be 4000 characters or fewer.",
+    activeSessionsTitle: "Active sessions",
+    noActiveSessions: "No active sessions.",
+    pendingIndexTitle: "Undelivered messages",
+    noPendingMessages: "No pending messages.",
+    supervisorHealthLabel: "Supervisor",
+    supervisorLastTick: "Last tick"
   }
 };
 
@@ -553,6 +570,48 @@ const styles = `
     font-size: 13px;
   }
 
+  .runtimePanel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 0 0 24px;
+    padding: 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    background: var(--surface-stat);
+  }
+
+  .runtimeBlock h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-accent);
+  }
+
+  .runtimeList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .runtimeList li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .supervisorFooter {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -937,6 +996,10 @@ const styles = `
     .statsGroup {
       flex: 1;
     }
+
+    .runtimePanel {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 560px) {
@@ -1208,6 +1271,11 @@ function MessageCard({
 }
 
 export default function App() {
+  const [runtimeState, setRuntimeState] = useState({
+    activeSessions: [],
+    pendingIndex: [],
+    supervisorHealth: { lastTickAt: null, tickErrors: 0 }
+  });
   const [messages, setMessages] = useState(emptyData);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -1248,6 +1316,38 @@ export default function App() {
       window.localStorage.setItem("mailbox-project", project);
     } catch {}
   }, [project]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const data = await fetchRuntimeState(controller.signal);
+        setRuntimeState({
+          activeSessions: Array.isArray(data.activeSessions)
+            ? data.activeSessions
+            : [],
+          pendingIndex: Array.isArray(data.pendingIndex) ? data.pendingIndex : [],
+          supervisorHealth: data.supervisorHealth || {
+            lastTickAt: null,
+            tickErrors: 0
+          }
+        });
+      } catch (loadError) {
+        if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
+          // Runtime visibility is non-fatal for the main dashboard.
+        }
+      }
+    }
+
+    void load();
+    const intervalId = window.setInterval(load, pollIntervalMs);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -1575,6 +1675,59 @@ export default function App() {
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className="runtimePanel">
+            <div className="runtimeBlock">
+              <h2>{t.activeSessionsTitle}</h2>
+              {runtimeState.activeSessions.length === 0 ? (
+                <p className="columnHint">{t.noActiveSessions}</p>
+              ) : (
+                <ul className="runtimeList">
+                  {runtimeState.activeSessions.map((session) => (
+                    <li key={session.session_id}>
+                      <span className="chip">{session.agent}</span>
+                      <span className="chip chipProject">{session.project}</span>
+                      <span className="mono">{session.session_id}</span>
+                      <span className="timestamp">
+                        {formatTimestamp(session.last_seen, lang, t)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="runtimeBlock">
+              <h2>
+                {t.pendingIndexTitle} ({runtimeState.pendingIndex.length})
+              </h2>
+              {runtimeState.pendingIndex.length === 0 ? (
+                <p className="columnHint">{t.noPendingMessages}</p>
+              ) : (
+                <ul className="runtimeList">
+                  {runtimeState.pendingIndex.map((message) => (
+                    <li key={message.relativePath}>
+                      <span className="chip">{message.to}</span>
+                      {message.project ? (
+                        <span className="chip chipProject">{message.project}</span>
+                      ) : null}
+                      <span className="mono">{message.thread}</span>
+                      <span className="timestamp">
+                        {formatTimestamp(message.created, lang, t)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <p className="supervisorFooter">
+              <strong>{t.supervisorHealthLabel}</strong>
+              {" · "}
+              {t.supervisorLastTick}:{" "}
+              {runtimeState.supervisorHealth.lastTickAt
+                ? formatTimestamp(runtimeState.supervisorHealth.lastTickAt, lang, t)
+                : "—"}
+            </p>
           </section>
 
           {error ? (

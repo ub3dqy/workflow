@@ -1,5 +1,7 @@
 import express from "express";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createSupervisor } from "./supervisor.mjs";
 import {
   archiveMessageFile,
   appendNoteToMessageFile,
@@ -19,7 +21,10 @@ import {
   validateResolution
 } from "../scripts/mailbox-lib.mjs";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const mailboxRoot = defaultMailboxRoot;
+const runtimeRoot = path.resolve(__dirname, "..", "mailbox-runtime");
 const app = express();
 
 app.use((request, response, next) => {
@@ -210,6 +215,35 @@ agentRouter.get("/messages", async (request, response) => {
 
 app.use("/api/agent", agentRouter);
 
-app.listen(port, host, () => {
+const supervisor = createSupervisor({
+  mailboxRoot,
+  runtimeRoot,
+  pollIntervalMs: 3000,
+  logger: console
+});
+app.use("/api/runtime", supervisor.router);
+
+await supervisor.start();
+
+const server = app.listen(port, host, () => {
   console.log(`Server listening on ${host}:${port}`);
 });
+
+function shutdown(signal) {
+  process.stderr.write(`[server] ${signal} received, shutting down\n`);
+  supervisor.stop();
+  if (typeof server.closeAllConnections === "function") {
+    server.closeAllConnections();
+  }
+  server.close(() => {
+    process.stderr.write("[server] clean exit\n");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    process.stderr.write("[server] force exit after 3s timeout\n");
+    process.exit(1);
+  }, 3000);
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

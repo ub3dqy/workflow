@@ -71,3 +71,12 @@ export async function fetchAgentMessages({ project, signal } = {}) {
   });
   return parseJsonResponse(response, `Agent API returned ${response.status}`);
 }
+
+export async function fetchRuntimeState(signal) {
+  const response = await fetch("/api/runtime/state", {
+    cache: "no-store",
+    signal
+  });
+
+  return parseJsonResponse(response, `Runtime API returned ${response.status}`);
+}
