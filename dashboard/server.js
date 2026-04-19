@@ -174,6 +174,13 @@ app.post("/api/notes", async (request, response) => {
   }
 });
 
+const supervisor = createSupervisor({
+  mailboxRoot,
+  runtimeRoot,
+  pollIntervalMs: 3000,
+  logger: console
+});
+
 const agentRouter = express.Router();
 
 agentRouter.use((request, response, next) => {
@@ -213,14 +220,63 @@ agentRouter.get("/messages", async (request, response) => {
   }
 });
 
+agentRouter.get("/runtime/deliveries", (request, response) => {
+  const sessionId = typeof request.query.session_id === "string"
+    ? request.query.session_id.trim()
+    : "";
+  const project = typeof request.query.project === "string"
+    ? request.query.project.trim()
+    : "";
+
+  if (!sessionId) {
+    response.status(400).json({ error: "session_id query param required" });
+    return;
+  }
+
+  if (!project) {
+    response.status(400).json({ error: "project query param required (agent-path)" });
+    return;
+  }
+
+  const session = supervisor.state.sessions.get(sessionId);
+  if (!session) {
+    response.status(404).json({ error: "session not found" });
+    return;
+  }
+
+  if (session.project !== project) {
+    response.status(403).json({ error: "project scope mismatch for session" });
+    return;
+  }
+
+  const SESSION_STALE_MS = 60_000;
+  const isActive = Date.now() - Date.parse(session.last_seen) <= SESSION_STALE_MS;
+  if (!isActive) {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ deliveries: [], session_expired: true });
+    return;
+  }
+
+  const deliveries = supervisor.state.pendingIndex.filter(
+    (item) => item.deliverable === true
+      && item.to === session.agent
+      && item.project === session.project
+  );
+
+  response.setHeader("Cache-Control", "no-store");
+  response.json({
+    deliveries,
+    session: {
+      session_id: session.session_id,
+      agent: session.agent,
+      project: session.project
+    },
+    session_expired: false
+  });
+});
+
 app.use("/api/agent", agentRouter);
 
-const supervisor = createSupervisor({
-  mailboxRoot,
-  runtimeRoot,
-  pollIntervalMs: 3000,
-  logger: console
-});
 app.use("/api/runtime", supervisor.router);
 
 await supervisor.start();
