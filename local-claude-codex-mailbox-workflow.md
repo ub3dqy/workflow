@@ -394,6 +394,24 @@ Paperclip-light pivot стартует с persistent task queue в supervisor ba
 - **Out of scope P1**: adapter launch (P2), orchestrator loop (P3), real agent spawn (P4), coordinator restart recovery (P5+).
 - **Project isolation baseline**: task `project` mandatory, list filter respects query. No new leak vectors; existing follow-up (`memory-claude/wiki/project_isolation_open_followup.md`) post-P4.
 
+### Adapter Contract (paperclip pivot P2)
+
+Paperclip-light coordinator-owned execution требует abstract agent adapter для spawn/resume/shutdown/lifecycle. Phase P2 вводит contract interface + mock implementation:
+
+- **Interface**: `scripts/adapters/agent-adapter.mjs` — JSDoc typedefs + `AGENT_ADAPTER_METHODS` canonical list + `validateAdapter(candidate)` helper. No runtime logic.
+- **Mock**: `scripts/adapters/mock-adapter.mjs` — full 8-method implementation. In-memory mock state + optional call recording к `mailbox-runtime/mock-adapter-calls.json` для debugging. Used by P3 orchestrator tests.
+- **Methods** (signatures в research doc + JSDoc):
+  - `launch` — fresh session with initial prompt
+  - `resume` — continue session with new message (Claude CLI primary delivery mechanism)
+  - `shutdown` — SIGTERM graceful или force SIGKILL
+  - `isAlive` — process liveness probe
+  - `attachExisting` — reconnect к user-opened session (best-effort)
+  - `injectMessage` — mid-life inject (falls back к resume для Claude CLI)
+  - `parseCompletionSignal` — heuristic detection of agent done (text/json/stream-json)
+  - `classifyCrash` — normalize exit failure → {env|auth|timeout|agent-error|unknown}
+- **Research**: `docs/codex-tasks/paperclip-pivot-adapter-contract-research.md` — Claude Code CLI primitives extracted, Codex CLI gaps flagged для P4 live probe.
+- **Out of scope P2**: orchestrator integration (P3), real ClaudeCodeAdapter/CodexAdapter (P4).
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:
