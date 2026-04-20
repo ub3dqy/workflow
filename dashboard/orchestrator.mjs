@@ -118,6 +118,18 @@ export function createOrchestrator({ supervisor, adapter, logger = console }) {
     }
 
     if (task.state === "awaiting-reply") {
+      if (await supervisor.isThreadResolved({
+        thread: task.thread,
+        project: task.project,
+        since: task.createdAt
+      })) {
+        supervisor.transitionTask(task.id, "resolved", {
+          stopReason: "thread-resolved"
+        });
+        healthCounters.taskTransitions += 1;
+        return { transition: "resolved", reason: "thread-resolved" };
+      }
+
       const reply = findReplyInPendingIndex(task, state);
       if (!reply) {
         return { noop: true, reason: "no-reply-yet" };

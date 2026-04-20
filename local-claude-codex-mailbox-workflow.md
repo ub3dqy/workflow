@@ -967,3 +967,13 @@ Mailbox не предназначен для больших логов, дамп
 - требования к Phase 3 helper scripts: validator, atomic seq, cached lookup
 
 Следующий логический шаг после этого draft'а — не "добавить ещё философии", а перевести его в формальный execution handoff plan для Phase 1 MVP.
+
+### Thread Resolution (paperclip mailbox-resolution)
+
+`supervisor.isThreadResolved({thread, project, since})` async helper reads `agent-mailbox/archive/<thread>/*.md` via mailbox-lib `readBucket("archive")` и returns `true` если есть archived message под заданным thread+project с `resolution ∈ {answered, no-reply-needed, superseded}` И `archived_at > since` (`since` pivot blocks stale-thread-reuse false-resolve; legacy rows без valid `archived_at` explicitly excluded, не fall-through).
+
+Orchestrator consumes helper at the top of `handleTaskTick` `awaiting-reply` branch — before pendingIndex reply-lookup — passing `since: task.createdAt`. If resolved, task transitions к `resolved` terminal state с `stopReason: "thread-resolved"` и `resolvedAt` auto-populated by supervisor. This closes the 4th canonical break condition (completing: max-iter-exceeded, failed, stopped, resolved) originally specified в architecture §6 P3 and honest-downgraded from P3 via F5 post-R2.
+
+Scope: resolution check gated к `awaiting-reply` only. `handing-off` state intentionally not covered в this iteration — mid-handoff resolution signal semantics deferred к P5+.
+
+Runtime overhead: each supervisor pollTick с active awaiting-reply task triggers one archive directory scan (`readBucket` recursive). Typical archive size (<200 messages) = O(ms). Large archive optimisation (thread-scoped listing / fs.watch cache) — P5+.

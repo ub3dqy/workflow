@@ -325,6 +325,34 @@ export function createSupervisor({
     return state.taskRegistry.get(id) || null;
   }
 
+  const RESOLVED_STATUSES = new Set(["answered", "no-reply-needed", "superseded"]);
+
+  async function isThreadResolved({ thread, project, since }) {
+    if (!thread || !project) return false;
+    const normalized = normalizeProject(project);
+    const sinceMs = since ? Date.parse(since) : null;
+    const sinceValid = Number.isFinite(sinceMs);
+    try {
+      const archived = await readBucket("archive", mailboxRoot);
+      return archived.some((message) => {
+        if (message.thread !== thread) return false;
+        if (normalizeProject(message.project) !== normalized) return false;
+        if (!RESOLVED_STATUSES.has(message.resolution)) return false;
+        if (sinceValid) {
+          const archivedRaw = message.archived_at || message.metadata?.archived_at;
+          if (!archivedRaw) return false;
+          const archivedMs = Date.parse(archivedRaw);
+          if (!Number.isFinite(archivedMs)) return false;
+          if (archivedMs <= sinceMs) return false;
+        }
+        return true;
+      });
+    } catch (error) {
+      logger.error?.("[supervisor] isThreadResolved read failed:", error);
+      return false;
+    }
+  }
+
   async function pollTick() {
     if (state.supervisorHealth.isScanning) {
       return;
@@ -434,6 +462,7 @@ export function createSupervisor({
     stopTask,
     listTasks,
     getTask,
-    persistTasks
+    persistTasks,
+    isThreadResolved
   };
 }
