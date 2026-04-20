@@ -217,6 +217,20 @@ const orchestrator = createOrchestrator({
 });
 supervisor.setOrchestrator(orchestrator);
 
+app.post("/api/monitor/start", (request, response) => {
+  const enabled = supervisor.setMonitorEnabled(true);
+  response.json({ enabled });
+});
+
+app.post("/api/monitor/stop", (request, response) => {
+  const enabled = supervisor.setMonitorEnabled(false);
+  response.json({ enabled });
+});
+
+app.get("/api/monitor/status", (request, response) => {
+  response.json({ enabled: supervisor.isMonitorEnabled() });
+});
+
 const agentRouter = express.Router();
 
 agentRouter.use((request, response, next) => {

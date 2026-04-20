@@ -68,6 +68,11 @@ const translations = {
     themeAuto: "Авто",
     soundMute: "Выключить звук уведомлений",
     soundUnmute: "Включить звук уведомлений",
+    monitorStart: "Запустить автоматическую проверку почты",
+    monitorStop: "Остановить автоматическую проверку почты",
+    notRead: "не прочитано",
+    sentAt: "Отправлено",
+    readAt: "Прочитано",
     addNote: "Добавить заметку",
     addingNote: "Отправка...",
     noteLabel: "Заметка от пользователя",
@@ -144,6 +149,11 @@ const translations = {
     themeAuto: "Auto",
     soundMute: "Mute notification sound",
     soundUnmute: "Unmute notification sound",
+    monitorStart: "Start mail monitor",
+    monitorStop: "Stop mail monitor",
+    notRead: "not read",
+    sentAt: "Sent",
+    readAt: "Read",
     addNote: "Add note",
     addingNote: "Saving...",
     noteLabel: "User note",
@@ -435,6 +445,7 @@ const styles = `
 
   .langButton,
   .soundButton,
+  .monitorButton,
   .projectSelect,
   .refreshButton {
     border: 0;
@@ -456,10 +467,33 @@ const styles = `
     box-shadow: var(--button-outline-border);
   }
 
+  .monitorButton {
+    border: 1px solid var(--text-secondary);
+    background: var(--bg-radial);
+    color: var(--text-strong);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
   .soundButton {
     padding: 10px 14px;
     font-size: 18px;
     line-height: 1;
+  }
+
+  .monitorButton.on {
+    background: #d4f4d4;
+    border-color: #3aa03a;
+  }
+
+  .monitorButton.off {
+    background: #f0f0f0;
+    border-color: #999;
+  }
+
+  .monitorButton:disabled {
+    opacity: 0.5;
+    cursor: wait;
   }
 
   .projectSelect {
@@ -479,6 +513,7 @@ const styles = `
 
   .langButton:hover,
   .soundButton:hover,
+  .monitorButton:hover,
   .projectSelect:hover {
     transform: translateY(-1px);
   }
@@ -490,6 +525,7 @@ const styles = `
 
   .langButton:disabled,
   .soundButton:disabled,
+  .monitorButton:disabled,
   .projectSelect:disabled,
   .refreshButton:disabled {
     cursor: progress;
@@ -859,6 +895,11 @@ const styles = `
     color: var(--text-accent);
   }
 
+  .notRead {
+    color: #c06600;
+    font-weight: 500;
+  }
+
   .cardMeta {
     margin: 0 0 6px;
     display: flex;
@@ -1178,8 +1219,7 @@ function formatTimestamp(value, lang, t) {
 
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC"
+    timeStyle: "short"
   }).format(new Date(parsed));
 }
 
@@ -1289,7 +1329,11 @@ function MessageCard({
         </span>
         <span className="timestamp">
           <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
-          {formatTimestamp(message.received_at || message.created, lang, t)}
+          {message.received_at ? (
+            formatTimestamp(message.received_at, lang, t)
+          ) : (
+            <span className="notRead">{t.notRead}</span>
+          )}
         </span>
         {message.answered_at ? (
           <span className="timestamp">
@@ -1406,6 +1450,9 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(
     () => getStoredText("mailbox-sound", "on") !== "off"
   );
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [monitorEnabled, setMonitorEnabled] = useState(false);
+  const [monitorBusy, setMonitorBusy] = useState(false);
   const prevPendingCountsRef = useRef(null);
 
   const t = translations[lang] ?? translations.ru;
@@ -1484,6 +1531,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+
+    async function poll() {
+      try {
+        const response = await fetch("/api/monitor/status");
+        if (!alive || !response.ok) {
+          return;
+        }
+        const data = await response.json();
+        setMonitorEnabled(Boolean(data.enabled));
+      } catch {}
+    }
+
+    void poll();
+    const intervalId = window.setInterval(poll, 5000);
+
+    return () => {
+      alive = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem("mailbox-theme", theme);
     } catch {}
@@ -1494,6 +1564,37 @@ export default function App() {
       window.localStorage.setItem("mailbox-sound", soundEnabled ? "on" : "off");
     } catch {}
   }, [soundEnabled]);
+
+  useEffect(() => {
+    if (audioUnlocked) {
+      return undefined;
+    }
+
+    const unlock = () => {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          void ctx.resume().catch(() => {});
+          setTimeout(() => {
+            void ctx.close().catch(() => {});
+          }, 100);
+        }
+      } catch {}
+
+      setAudioUnlocked(true);
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+
+    document.addEventListener("click", unlock);
+    document.addEventListener("keydown", unlock);
+
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, [audioUnlocked]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -1635,6 +1736,26 @@ export default function App() {
     setLang((currentLang) => (currentLang === "ru" ? "en" : "ru"));
   });
 
+  const toggleMonitor = useEffectEvent(async () => {
+    if (monitorBusy) {
+      return;
+    }
+
+    setMonitorBusy(true);
+    try {
+      const endpoint = monitorEnabled
+        ? "/api/monitor/stop"
+        : "/api/monitor/start";
+      const response = await fetch(endpoint, { method: "POST" });
+      if (response.ok) {
+        const data = await response.json();
+        setMonitorEnabled(Boolean(data.enabled));
+      }
+    } finally {
+      setMonitorBusy(false);
+    }
+  });
+
   const archiveInboxMessage = useEffectEvent(async (message) => {
     setActiveAction(`archive:${message.relativePath}`);
 
@@ -1767,6 +1888,19 @@ export default function App() {
                     type="button"
                   >
                     {soundEnabled ? "🔊" : "🔇"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={monitorEnabled ? "monitorButton on" : "monitorButton off"}
+                    onClick={() => {
+                      void toggleMonitor();
+                    }}
+                    disabled={monitorBusy}
+                    aria-pressed={monitorEnabled}
+                    title={monitorEnabled ? t.monitorStop : t.monitorStart}
+                  >
+                    {monitorEnabled ? "🟢 Автопроверка: вкл" : "⚪ Автопроверка: выкл"}
                   </button>
 
                   <div

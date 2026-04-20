@@ -1,6 +1,9 @@
 import express from "express";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createClaudeCodeAdapter } from "../scripts/adapters/claude-code-adapter.mjs";
+import { createCodexAdapter } from "../scripts/adapters/codex-adapter.mjs";
 import {
   normalizeProject,
   readBucket,
@@ -325,6 +328,104 @@ export function createSupervisor({
     return state.taskRegistry.get(id) || null;
   }
 
+  // Mail monitor: pending letters -> one-shot agent launch with project-scoped check-mail prompt.
+  const MONITOR_FLAG_FILE = path.join(runtimeRoot, "monitor-enabled.json");
+  let monitorEnabled = false;
+  const monitorBusyAgents = new Set();
+  let monitorClaudeAdapter = null;
+  let monitorCodexAdapter = null;
+
+  async function loadMonitorEnabled() {
+    try {
+      const raw = await fs.readFile(MONITOR_FLAG_FILE, "utf8");
+      monitorEnabled = JSON.parse(raw)?.enabled === true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        logger.error?.("[monitor] load failed:", error);
+      }
+      monitorEnabled = false;
+    }
+  }
+
+  function persistMonitorEnabled() {
+    try {
+      fsSync.mkdirSync(runtimeRoot, { recursive: true });
+      const tmp = `${MONITOR_FLAG_FILE}.tmp`;
+      fsSync.writeFileSync(
+        tmp,
+        JSON.stringify({ enabled: monitorEnabled }, null, 2),
+        "utf8"
+      );
+      fsSync.renameSync(tmp, MONITOR_FLAG_FILE);
+    } catch (error) {
+      logger.error?.("[monitor] persist failed:", error);
+    }
+  }
+
+  function setMonitorEnabled(value) {
+    monitorEnabled = Boolean(value);
+    persistMonitorEnabled();
+    return monitorEnabled;
+  }
+
+  function isMonitorEnabled() {
+    return monitorEnabled;
+  }
+
+  function initMonitorAdapters() {
+    if (!monitorClaudeAdapter) {
+      monitorClaudeAdapter = createClaudeCodeAdapter({ logger });
+    }
+
+    if (!monitorCodexAdapter) {
+      const spawnPrefix =
+        process.platform === "win32"
+          ? ["wsl.exe", "-d", "Ubuntu", "bash", "-lc"]
+          : [];
+      const sessionsRoot = spawnPrefix.length ? null : undefined;
+      monitorCodexAdapter = createCodexAdapter({
+        spawnPrefix,
+        sessionsRoot,
+        logger
+      });
+    }
+  }
+
+  async function pingAgentForMessage(message) {
+    const agent = message.to;
+    if (agent !== "claude" && agent !== "codex") return;
+    if (monitorBusyAgents.has(agent)) return;
+    if (!message.project) return;
+
+    monitorBusyAgents.add(agent);
+    initMonitorAdapters();
+    const adapter = agent === "claude" ? monitorClaudeAdapter : monitorCodexAdapter;
+    const prompt = `Проверь почту проекта ${message.project}: node scripts/mailbox.mjs list --project ${message.project}`;
+
+    try {
+      await adapter.launch({
+        project: message.project,
+        thread: message.thread || "monitor-ping",
+        instruction: prompt
+      });
+    } catch (error) {
+      logger.error?.(
+        `[monitor] ${agent} spawn failed:`,
+        error?.message || error
+      );
+    } finally {
+      monitorBusyAgents.delete(agent);
+    }
+  }
+
+  function runMonitor(pendingList) {
+    if (!monitorEnabled) return;
+    for (const message of pendingList) {
+      if (message.received_at) continue;
+      void pingAgentForMessage(message);
+    }
+  }
+
   const RESOLVED_STATUSES = new Set(["answered", "no-reply-needed", "superseded"]);
 
   async function isThreadResolved({ thread, project, since }) {
@@ -385,6 +486,7 @@ export function createSupervisor({
         });
 
       state.pendingIndex = pending;
+      runMonitor(pending);
 
       if (orchestrator && typeof orchestrator.processTick === "function") {
         try {
@@ -438,6 +540,7 @@ export function createSupervisor({
     await persistSessions();
     await persistHealth();
     await persistTasks();
+    await loadMonitorEnabled();
     await pollTick();
     timer = setInterval(() => {
       void pollTick();
@@ -463,6 +566,9 @@ export function createSupervisor({
     listTasks,
     getTask,
     persistTasks,
-    isThreadResolved
+    isThreadResolved,
+    setMonitorEnabled,
+    isMonitorEnabled,
+    loadMonitorEnabled
   };
 }
