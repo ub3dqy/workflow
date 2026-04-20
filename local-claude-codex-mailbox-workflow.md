@@ -412,6 +412,23 @@ Paperclip-light coordinator-owned execution требует abstract agent adapte
 - **Research**: `docs/codex-tasks/paperclip-pivot-adapter-contract-research.md` — Claude Code CLI primitives extracted, Codex CLI gaps flagged для P4 live probe.
 - **Out of scope P2**: orchestrator integration (P3), real ClaudeCodeAdapter/CodexAdapter (P4).
 
+### Orchestrator Loop (paperclip pivot P3)
+
+Paperclip-light coordinator loop wired между task queue (P1) и adapter interface (P2):
+
+- **Entrypoint**: `createOrchestrator({supervisor, adapter, logger})` → `{processTick, stop}`.
+- **Integration**: supervisor.pollTick tail calls `orchestrator.processTick()` each 3s cycle. Non-throwing — errors logged но не ломают pollTick.
+- **Per-task state machine progression**:
+  - `pending` → orchestrator calls `adapter.launch` → transitions `launching` → `awaiting-reply` (iteration=1, currentAgent=initialAgent).
+  - `awaiting-reply` → orchestrator scans `supervisor.state.pendingIndex` для new message with `task.thread` + `to=nextAgent` → transitions `handing-off` → `adapter.resume(newCurrent)` → back к `awaiting-reply` (iteration++).
+- **Break conditions** (P3 scope — subset of architecture §6 P3):
+  - `task.iterations >= task.maxIterations` → `max-iter-exceeded`.
+  - 3 consecutive adapter errors на same task → `failed` с stopReason=`adapter-error-threshold`.
+  - User POST `/api/tasks/:id/stop` → `stopped` (guarded via transitionTask terminal-state lock).
+- **Resolution break deferred к P4**: P3 does not read mailbox archive directly for thread resolution. Automatic `resolved` transition will be added in P4 via supervisor extension or adapter completion signal.
+- **Observability**: `supervisorHealth.{taskTicksProcessed, taskTransitions, taskCyclesCompleted, taskAdapterErrors}` counters.
+- **Adapter plug-in**: P3 uses MockAdapter (from P2) for deterministic cycle testing. P4 replaces it with real ClaudeCodeAdapter + CodexAdapter.
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:

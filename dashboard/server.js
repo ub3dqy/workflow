@@ -1,7 +1,9 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createOrchestrator } from "./orchestrator.mjs";
 import { createSupervisor } from "./supervisor.mjs";
+import { createMockAdapter } from "../scripts/adapters/mock-adapter.mjs";
 import {
   archiveMessageFile,
   appendNoteToMessageFile,
@@ -180,6 +182,15 @@ const supervisor = createSupervisor({
   pollIntervalMs: 3000,
   logger: console
 });
+const orchestratorAdapter = createMockAdapter({
+  recordCallsTo: path.join(runtimeRoot, "orchestrator-mock-calls.json")
+});
+const orchestrator = createOrchestrator({
+  supervisor,
+  adapter: orchestratorAdapter,
+  logger: console
+});
+supervisor.setOrchestrator(orchestrator);
 
 const agentRouter = express.Router();
 
@@ -337,6 +348,7 @@ const server = app.listen(port, host, () => {
 
 function shutdown(signal) {
   process.stderr.write(`[server] ${signal} received, shutting down\n`);
+  orchestrator.stop();
   supervisor.stop();
   if (typeof server.closeAllConnections === "function") {
     server.closeAllConnections();

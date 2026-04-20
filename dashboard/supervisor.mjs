@@ -25,11 +25,16 @@ export function createSupervisor({
       lastTickAt: null,
       lastTickMs: 0,
       tickErrors: 0,
-      isScanning: false
+      isScanning: false,
+      taskTicksProcessed: 0,
+      taskTransitions: 0,
+      taskCyclesCompleted: 0,
+      taskAdapterErrors: 0
     }
   };
 
   let timer = null;
+  let orchestrator = null;
   const router = express.Router();
 
   router.use(express.json());
@@ -206,10 +211,19 @@ export function createSupervisor({
     return null;
   }
 
-  function addTask(input) {
+  function setOrchestrator(next) {
+    orchestrator = next;
+  }
+
+  function addTask(input = {}) {
     const project = typeof input.project === "string" ? input.project.trim() : "";
     if (!project) {
       throw new Error("task requires project");
+    }
+
+    const thread = typeof input.thread === "string" ? input.thread.trim() : "";
+    if (!thread) {
+      throw new Error("addTask requires non-empty thread for orchestrator correlation");
     }
 
     const initialAgent = normalizeAgent(input.initialAgent);
@@ -231,7 +245,7 @@ export function createSupervisor({
       schemaVersion: TASK_SCHEMA_VERSION,
       id: buildTaskId(input.slug || instruction.slice(0, 40)),
       project,
-      thread: typeof input.thread === "string" ? input.thread.trim() : "",
+      thread,
       instruction,
       initialAgent,
       currentAgent: null,
@@ -343,6 +357,16 @@ export function createSupervisor({
         });
 
       state.pendingIndex = pending;
+
+      if (orchestrator && typeof orchestrator.processTick === "function") {
+        try {
+          await orchestrator.processTick();
+          await persistTasks();
+        } catch (orchError) {
+          logger.error("[supervisor] orchestrator.processTick failed:", orchError);
+        }
+      }
+
       state.supervisorHealth.lastTickAt = toUtcTimestamp();
       state.supervisorHealth.lastTickMs = Date.now() - startedAt;
 
@@ -405,6 +429,7 @@ export function createSupervisor({
     stop,
     state,
     addTask,
+    setOrchestrator,
     transitionTask,
     stopTask,
     listTasks,
