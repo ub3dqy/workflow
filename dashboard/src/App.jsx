@@ -1,13 +1,9 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   archiveMessage,
-  createTask,
-  fetchTask,
   fetchMessages,
   fetchRuntimeState,
-  fetchTasks,
-  postNote,
-  stopTask
+  postNote
 } from "./api.js";
 
 const pollIntervalMs = 3000;
@@ -68,11 +64,6 @@ const translations = {
     themeAuto: "Авто",
     soundMute: "Выключить звук уведомлений",
     soundUnmute: "Включить звук уведомлений",
-    monitorStart: "Запустить автоматическую проверку почты",
-    monitorStop: "Остановить автоматическую проверку почты",
-    notRead: "не прочитано",
-    sentAt: "Отправлено",
-    readAt: "Прочитано",
     addNote: "Добавить заметку",
     addingNote: "Отправка...",
     noteLabel: "Заметка от пользователя",
@@ -87,17 +78,7 @@ const translations = {
     pendingIndexTitle: "Незабранные сообщения",
     noPendingMessages: "Нет pending-сообщений.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Последний цикл",
-    tasksTitle: "Задачи",
-    tasksEmpty: "Задач нет.",
-    tasksStart: "Создать задачу",
-    tasksProjectLabel: "Проект",
-    tasksAgentLabel: "Начинает",
-    tasksInstructionLabel: "Задание",
-    tasksIterationsLabel: "Итерации",
-    tasksStopAction: "Остановить",
-    tasksRefreshAction: "Обновить",
-    tasksStateLabel: "Статус"
+    supervisorLastTick: "Последний цикл"
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -149,11 +130,6 @@ const translations = {
     themeAuto: "Auto",
     soundMute: "Mute notification sound",
     soundUnmute: "Unmute notification sound",
-    monitorStart: "Start mail monitor",
-    monitorStop: "Stop mail monitor",
-    notRead: "not read",
-    sentAt: "Sent",
-    readAt: "Read",
     addNote: "Add note",
     addingNote: "Saving...",
     noteLabel: "User note",
@@ -168,17 +144,7 @@ const translations = {
     pendingIndexTitle: "Undelivered messages",
     noPendingMessages: "No pending messages.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Last tick",
-    tasksTitle: "Tasks",
-    tasksEmpty: "No tasks.",
-    tasksStart: "Start task",
-    tasksProjectLabel: "Project",
-    tasksAgentLabel: "Starts",
-    tasksInstructionLabel: "Instruction",
-    tasksIterationsLabel: "Iterations",
-    tasksStopAction: "Stop",
-    tasksRefreshAction: "Refresh",
-    tasksStateLabel: "State"
+    supervisorLastTick: "Last tick"
   }
 };
 
@@ -445,7 +411,6 @@ const styles = `
 
   .langButton,
   .soundButton,
-  .monitorButton,
   .projectSelect,
   .refreshButton {
     border: 0;
@@ -467,33 +432,10 @@ const styles = `
     box-shadow: var(--button-outline-border);
   }
 
-  .monitorButton {
-    border: 1px solid var(--text-secondary);
-    background: var(--bg-radial);
-    color: var(--text-strong);
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-
   .soundButton {
     padding: 10px 14px;
     font-size: 18px;
     line-height: 1;
-  }
-
-  .monitorButton.on {
-    background: #d4f4d4;
-    border-color: #3aa03a;
-  }
-
-  .monitorButton.off {
-    background: #f0f0f0;
-    border-color: #999;
-  }
-
-  .monitorButton:disabled {
-    opacity: 0.5;
-    cursor: wait;
   }
 
   .projectSelect {
@@ -513,7 +455,6 @@ const styles = `
 
   .langButton:hover,
   .soundButton:hover,
-  .monitorButton:hover,
   .projectSelect:hover {
     transform: translateY(-1px);
   }
@@ -525,7 +466,6 @@ const styles = `
 
   .langButton:disabled,
   .soundButton:disabled,
-  .monitorButton:disabled,
   .projectSelect:disabled,
   .refreshButton:disabled {
     cursor: progress;
@@ -672,86 +612,6 @@ const styles = `
     color: var(--text-muted);
   }
 
-  .tasksPanel {
-    margin: 0 0 24px;
-    padding: 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: 16px;
-    background: var(--surface-stat);
-  }
-
-  .tasksHeader h2 {
-    margin: 0 0 12px;
-    font-size: 14px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-accent);
-  }
-
-  .tasksList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 10px;
-  }
-
-  .tasksItem {
-    padding: 10px;
-    border: 1px solid var(--border-soft);
-    border-radius: 10px;
-    background: var(--surface);
-    display: grid;
-    gap: 6px;
-    font-size: 12px;
-  }
-
-  .tasksTopRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .tasksIdMono {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    opacity: 0.7;
-  }
-
-  .tasksInstruction {
-    font-size: 13px;
-    line-height: 1.4;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .tasksMeta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-muted);
-  }
-
-  .tasksStopButton {
-    justify-self: start;
-    padding: 4px 10px;
-    border: 1px solid var(--border-soft);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .tasksStopButton:hover {
-    background: var(--surface-stat);
-  }
-
   .grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -893,11 +753,6 @@ const styles = `
   .timestampLabel {
     font-weight: 700;
     color: var(--text-accent);
-  }
-
-  .notRead {
-    color: #c06600;
-    font-weight: 500;
   }
 
   .cardMeta {
@@ -1219,7 +1074,8 @@ function formatTimestamp(value, lang, t) {
 
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: "UTC"
   }).format(new Date(parsed));
 }
 
@@ -1329,11 +1185,7 @@ function MessageCard({
         </span>
         <span className="timestamp">
           <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
-          {message.received_at ? (
-            formatTimestamp(message.received_at, lang, t)
-          ) : (
-            <span className="notRead">{t.notRead}</span>
-          )}
+          {formatTimestamp(message.received_at || message.created, lang, t)}
         </span>
         {message.answered_at ? (
           <span className="timestamp">
@@ -1424,10 +1276,6 @@ export default function App() {
     pendingIndex: [],
     supervisorHealth: { lastTickAt: null, tickErrors: 0 }
   });
-  const [tasksState, setTasksState] = useState({
-    tasks: [],
-    lastUpdatedAt: null
-  });
   const [messages, setMessages] = useState(emptyData);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -1450,9 +1298,6 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(
     () => getStoredText("mailbox-sound", "on") !== "off"
   );
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const [monitorEnabled, setMonitorEnabled] = useState(false);
-  const [monitorBusy, setMonitorBusy] = useState(false);
   const prevPendingCountsRef = useRef(null);
 
   const t = translations[lang] ?? translations.ru;
@@ -1505,55 +1350,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      try {
-        const data = await fetchTasks({}, controller.signal);
-        setTasksState({
-          tasks: Array.isArray(data.tasks) ? data.tasks : [],
-          lastUpdatedAt: new Date().toISOString()
-        });
-      } catch (loadError) {
-        if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
-          // non-fatal
-        }
-      }
-    }
-
-    void load();
-    const intervalId = window.setInterval(load, pollIntervalMs);
-
-    return () => {
-      controller.abort();
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-
-    async function poll() {
-      try {
-        const response = await fetch("/api/monitor/status");
-        if (!alive || !response.ok) {
-          return;
-        }
-        const data = await response.json();
-        setMonitorEnabled(Boolean(data.enabled));
-      } catch {}
-    }
-
-    void poll();
-    const intervalId = window.setInterval(poll, 5000);
-
-    return () => {
-      alive = false;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  useEffect(() => {
     try {
       window.localStorage.setItem("mailbox-theme", theme);
     } catch {}
@@ -1564,37 +1360,6 @@ export default function App() {
       window.localStorage.setItem("mailbox-sound", soundEnabled ? "on" : "off");
     } catch {}
   }, [soundEnabled]);
-
-  useEffect(() => {
-    if (audioUnlocked) {
-      return undefined;
-    }
-
-    const unlock = () => {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          void ctx.resume().catch(() => {});
-          setTimeout(() => {
-            void ctx.close().catch(() => {});
-          }, 100);
-        }
-      } catch {}
-
-      setAudioUnlocked(true);
-      document.removeEventListener("click", unlock);
-      document.removeEventListener("keydown", unlock);
-    };
-
-    document.addEventListener("click", unlock);
-    document.addEventListener("keydown", unlock);
-
-    return () => {
-      document.removeEventListener("click", unlock);
-      document.removeEventListener("keydown", unlock);
-    };
-  }, [audioUnlocked]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -1736,26 +1501,6 @@ export default function App() {
     setLang((currentLang) => (currentLang === "ru" ? "en" : "ru"));
   });
 
-  const toggleMonitor = useEffectEvent(async () => {
-    if (monitorBusy) {
-      return;
-    }
-
-    setMonitorBusy(true);
-    try {
-      const endpoint = monitorEnabled
-        ? "/api/monitor/stop"
-        : "/api/monitor/start";
-      const response = await fetch(endpoint, { method: "POST" });
-      if (response.ok) {
-        const data = await response.json();
-        setMonitorEnabled(Boolean(data.enabled));
-      }
-    } finally {
-      setMonitorBusy(false);
-    }
-  });
-
   const archiveInboxMessage = useEffectEvent(async (message) => {
     setActiveAction(`archive:${message.relativePath}`);
 
@@ -1890,19 +1635,6 @@ export default function App() {
                     {soundEnabled ? "🔊" : "🔇"}
                   </button>
 
-                  <button
-                    type="button"
-                    className={monitorEnabled ? "monitorButton on" : "monitorButton off"}
-                    onClick={() => {
-                      void toggleMonitor();
-                    }}
-                    disabled={monitorBusy}
-                    aria-pressed={monitorEnabled}
-                    title={monitorEnabled ? t.monitorStop : t.monitorStart}
-                  >
-                    {monitorEnabled ? "🟢 Автопроверка: вкл" : "⚪ Автопроверка: выкл"}
-                  </button>
-
                   <div
                     aria-label={t.themeGroupLabel}
                     className="segmentedControl"
@@ -1996,63 +1728,6 @@ export default function App() {
                 ? formatTimestamp(runtimeState.supervisorHealth.lastTickAt, lang, t)
                 : "—"}
             </p>
-          </section>
-
-          <section className="tasksPanel">
-            <div className="tasksHeader">
-              <h2>{t.tasksTitle} ({tasksState.tasks.length})</h2>
-            </div>
-            {tasksState.tasks.length === 0 ? (
-              <p className="columnHint">{t.tasksEmpty}</p>
-            ) : (
-              <ul className="tasksList">
-                {tasksState.tasks.map((task) => (
-                  <li key={task.id} className="tasksItem">
-                    <div className="tasksTopRow">
-                      <span className="chip">{task.state}</span>
-                      <span className="chip chipProject">{task.project}</span>
-                      <span className="chip">
-                        {task.currentAgent || task.nextAgent || task.initialAgent}
-                      </span>
-                      <span className="mono tasksIdMono">{task.id}</span>
-                    </div>
-                    <div className="tasksInstruction">{task.instruction}</div>
-                    <div className="tasksMeta">
-                      <span>
-                        {t.tasksIterationsLabel}: {task.iterations}/{task.maxIterations}
-                      </span>
-                      <span className="timestamp">
-                        {formatTimestamp(task.lastActivityAt || task.createdAt, lang, t)}
-                      </span>
-                      {task.stopReason ? (
-                        <span className="chip">{task.stopReason}</span>
-                      ) : null}
-                    </div>
-                    {task.state !== "resolved" &&
-                    task.state !== "failed" &&
-                    task.state !== "stopped" &&
-                    task.state !== "max-iter-exceeded" ? (
-                      <button
-                        type="button"
-                        className="tasksStopButton"
-                        onClick={async () => {
-                          try {
-                            await stopTask(task.id);
-                            const data = await fetchTasks({});
-                            setTasksState({
-                              tasks: Array.isArray(data.tasks) ? data.tasks : [],
-                              lastUpdatedAt: new Date().toISOString()
-                            });
-                          } catch {}
-                        }}
-                      >
-                        {t.tasksStopAction}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
           </section>
 
           {error ? (

@@ -1,11 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createOrchestrator } from "./orchestrator.mjs";
 import { createSupervisor } from "./supervisor.mjs";
-import { createClaudeCodeAdapter } from "../scripts/adapters/claude-code-adapter.mjs";
-import { createCodexAdapter } from "../scripts/adapters/codex-adapter.mjs";
-import { createMockAdapter } from "../scripts/adapters/mock-adapter.mjs";
 import {
   archiveMessageFile,
   appendNoteToMessageFile,
@@ -184,52 +180,6 @@ const supervisor = createSupervisor({
   pollIntervalMs: 3000,
   logger: console
 });
-const adapterKind = (process.env.DASHBOARD_ADAPTER || "mock").toLowerCase();
-let orchestratorAdapter;
-if (adapterKind === "claude-code") {
-  orchestratorAdapter = createClaudeCodeAdapter({
-    recordCallsTo: path.join(runtimeRoot, "orchestrator-claude-calls.json"),
-    logger: console
-  });
-  console.log("[bootstrap] adapter=claude-code (real)");
-} else if (adapterKind === "codex") {
-  const spawnPrefix = process.platform === "win32"
-    ? ["wsl.exe", "-d", "Ubuntu", "bash", "-lc"]
-    : [];
-  const sessionsRoot = spawnPrefix.length ? null : undefined;
-  orchestratorAdapter = createCodexAdapter({
-    spawnPrefix,
-    sessionsRoot,
-    recordCallsTo: path.join(runtimeRoot, "orchestrator-codex-calls.json"),
-    logger: console
-  });
-  console.log(`[bootstrap] adapter=codex (real${spawnPrefix.length ? ", via WSL, sessions --last fallback only" : ""})`);
-} else {
-  orchestratorAdapter = createMockAdapter({
-    recordCallsTo: path.join(runtimeRoot, "orchestrator-mock-calls.json")
-  });
-  console.log("[bootstrap] adapter=mock");
-}
-const orchestrator = createOrchestrator({
-  supervisor,
-  adapter: orchestratorAdapter,
-  logger: console
-});
-supervisor.setOrchestrator(orchestrator);
-
-app.post("/api/monitor/start", (request, response) => {
-  const enabled = supervisor.setMonitorEnabled(true);
-  response.json({ enabled });
-});
-
-app.post("/api/monitor/stop", (request, response) => {
-  const enabled = supervisor.setMonitorEnabled(false);
-  response.json({ enabled });
-});
-
-app.get("/api/monitor/status", (request, response) => {
-  response.json({ enabled: supervisor.isMonitorEnabled() });
-});
 
 const agentRouter = express.Router();
 
@@ -329,70 +279,14 @@ app.use("/api/agent", agentRouter);
 
 app.use("/api/runtime", supervisor.router);
 
-app.post("/api/tasks", async (request, response) => {
-  try {
-    const task = supervisor.addTask(request.body || {});
-    await supervisor.persistTasks();
-    response.status(201).json({ task });
-  } catch (error) {
-    response.status(400).json({
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-});
-
-app.get("/api/tasks", (request, response) => {
-  const project =
-    typeof request.query.project === "string"
-      ? request.query.project.trim()
-      : undefined;
-  const stateFilter =
-    typeof request.query.state === "string"
-      ? request.query.state.trim()
-      : undefined;
-  const tasks = supervisor.listTasks({ project, state: stateFilter });
-  response.setHeader("Cache-Control", "no-store");
-  response.json({ tasks });
-});
-
-app.get("/api/tasks/:id", (request, response) => {
-  const task = supervisor.getTask(request.params.id);
-  if (!task) {
-    response.status(404).json({ error: "task not found" });
-    return;
-  }
-  response.setHeader("Cache-Control", "no-store");
-  response.json({ task });
-});
-
-app.post("/api/tasks/:id/stop", async (request, response) => {
-  try {
-    const reason =
-      typeof request.body?.reason === "string" ? request.body.reason.trim() : "user-stop";
-    const task = supervisor.stopTask(request.params.id, reason || "user-stop");
-    await supervisor.persistTasks();
-    response.json({ task });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const status = message.startsWith("unknown task id") ? 404 : 400;
-    response.status(status).json({ error: message });
-  }
-});
-
 await supervisor.start();
 
 const server = app.listen(port, host, () => {
   console.log(`Server listening on ${host}:${port}`);
 });
 
-async function shutdown(signal) {
+function shutdown(signal) {
   process.stderr.write(`[server] ${signal} received, shutting down\n`);
-  orchestrator.stop();
-  try {
-    await orchestratorAdapter.shutdown({ force: false });
-  } catch (error) {
-    process.stderr.write(`[server] adapter.shutdown error: ${error.message}\n`);
-  }
   supervisor.stop();
   if (typeof server.closeAllConnections === "function") {
     server.closeAllConnections();
@@ -407,9 +301,5 @@ async function shutdown(signal) {
   }, 3000);
 }
 
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
-});
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

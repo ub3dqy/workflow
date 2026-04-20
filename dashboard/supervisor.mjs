@@ -1,9 +1,6 @@
 import express from "express";
-import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createClaudeCodeAdapter } from "../scripts/adapters/claude-code-adapter.mjs";
-import { createCodexAdapter } from "../scripts/adapters/codex-adapter.mjs";
 import {
   normalizeProject,
   readBucket,
@@ -22,22 +19,16 @@ export function createSupervisor({
   const state = {
     sessions: new Map(),
     pendingIndex: [],
-    taskRegistry: new Map(),
     supervisorHealth: {
       startedAt: null,
       lastTickAt: null,
       lastTickMs: 0,
       tickErrors: 0,
-      isScanning: false,
-      taskTicksProcessed: 0,
-      taskTransitions: 0,
-      taskCyclesCompleted: 0,
-      taskAdapterErrors: 0
+      isScanning: false
     }
   };
 
   let timer = null;
-  let orchestrator = null;
   const router = express.Router();
 
   router.use(express.json());
@@ -142,316 +133,10 @@ export function createSupervisor({
     );
   }
 
-  async function persistTasks() {
-    await atomicWriteJson(
-      path.join(runtimeRoot, "tasks.json"),
-      Array.from(state.taskRegistry.values())
-    );
-  }
-
   async function atomicWriteJson(finalPath, data) {
     const tmpPath = `${finalPath}.tmp`;
     await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
     await fs.rename(tmpPath, finalPath);
-  }
-
-  const TASK_SCHEMA_VERSION = 1;
-
-  const TASK_STATES = new Set([
-    "pending",
-    "launching",
-    "awaiting-reply",
-    "handing-off",
-    "resolved",
-    "failed",
-    "stopped",
-    "max-iter-exceeded"
-  ]);
-
-  const TERMINAL_STATES = new Set([
-    "resolved",
-    "failed",
-    "stopped",
-    "max-iter-exceeded"
-  ]);
-
-  const ALLOWED_TRANSITIONS = {
-    pending: new Set(["launching", "stopped", "failed"]),
-    launching: new Set(["awaiting-reply", "failed", "stopped"]),
-    "awaiting-reply": new Set([
-      "handing-off",
-      "failed",
-      "stopped",
-      "max-iter-exceeded",
-      "resolved"
-    ]),
-    "handing-off": new Set([
-      "awaiting-reply",
-      "resolved",
-      "failed",
-      "stopped",
-      "max-iter-exceeded"
-    ])
-  };
-
-  function buildTaskId(slug) {
-    const ts = toUtcTimestamp()
-      .replace(/[:-]/g, "")
-      .replace(/\..*Z$/, "Z");
-    const safeSlug =
-      String(slug || "task")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .slice(0, 40)
-        .replace(/^-|-$/g, "") || "task";
-    return `task-${ts}-${safeSlug}`;
-  }
-
-  function normalizeAgent(value) {
-    if (value === "claude" || value === "codex") {
-      return value;
-    }
-    return null;
-  }
-
-  function setOrchestrator(next) {
-    orchestrator = next;
-  }
-
-  function addTask(input = {}) {
-    const project = typeof input.project === "string" ? input.project.trim() : "";
-    if (!project) {
-      throw new Error("task requires project");
-    }
-
-    const thread = typeof input.thread === "string" ? input.thread.trim() : "";
-    if (!thread) {
-      throw new Error("addTask requires non-empty thread for orchestrator correlation");
-    }
-
-    const initialAgent = normalizeAgent(input.initialAgent);
-    if (!initialAgent) {
-      throw new Error("task requires initialAgent claude|codex");
-    }
-
-    const instruction =
-      typeof input.instruction === "string" ? input.instruction.trim() : "";
-    if (!instruction) {
-      throw new Error("task requires instruction");
-    }
-
-    const maxIter = Number.isFinite(input.maxIterations)
-      ? Math.max(1, Math.min(100, Math.floor(input.maxIterations)))
-      : 10;
-    const now = toUtcTimestamp();
-    const task = {
-      schemaVersion: TASK_SCHEMA_VERSION,
-      id: buildTaskId(input.slug || instruction.slice(0, 40)),
-      project,
-      thread,
-      instruction,
-      initialAgent,
-      currentAgent: null,
-      nextAgent: initialAgent,
-      sessionIds: { claude: "", codex: "" },
-      lastInboundMessageId: "",
-      lastOutboundMessageId: "",
-      iterations: 0,
-      maxIterations: maxIter,
-      state: "pending",
-      stopReason: "",
-      error: "",
-      createdAt: now,
-      lastActivityAt: now,
-      resolvedAt: ""
-    };
-    state.taskRegistry.set(task.id, task);
-    return task;
-  }
-
-  function transitionTask(id, nextState, patch = {}) {
-    const task = state.taskRegistry.get(id);
-    if (!task) {
-      throw new Error(`unknown task id ${id}`);
-    }
-    if (!TASK_STATES.has(nextState)) {
-      throw new Error(`invalid state ${nextState}`);
-    }
-    if (TERMINAL_STATES.has(task.state)) {
-      throw new Error(`task ${id} already terminal (${task.state})`);
-    }
-    const allowed = ALLOWED_TRANSITIONS[task.state];
-    if (!allowed || !allowed.has(nextState)) {
-      throw new Error(`illegal transition ${task.state} → ${nextState} for task ${id}`);
-    }
-    const next = {
-      ...task,
-      ...patch,
-      state: nextState,
-      lastActivityAt: toUtcTimestamp()
-    };
-    if (TERMINAL_STATES.has(nextState) && !next.resolvedAt) {
-      next.resolvedAt = next.lastActivityAt;
-    }
-    state.taskRegistry.set(id, next);
-    return next;
-  }
-
-  function stopTask(id, reason = "user-stop") {
-    const task = state.taskRegistry.get(id);
-    if (!task) {
-      throw new Error(`unknown task id ${id}`);
-    }
-    if (TERMINAL_STATES.has(task.state)) {
-      return task;
-    }
-    return transitionTask(id, "stopped", { stopReason: reason });
-  }
-
-  function listTasks(filters = {}) {
-    const arr = Array.from(state.taskRegistry.values());
-    const { project, state: stateFilter } = filters;
-    return arr
-      .filter((task) => {
-        if (project && task.project !== project) {
-          return false;
-        }
-        if (stateFilter && task.state !== stateFilter) {
-          return false;
-        }
-        return true;
-      })
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  }
-
-  function getTask(id) {
-    return state.taskRegistry.get(id) || null;
-  }
-
-  // Mail monitor: pending letters -> one-shot agent launch with project-scoped check-mail prompt.
-  const MONITOR_FLAG_FILE = path.join(runtimeRoot, "monitor-enabled.json");
-  let monitorEnabled = false;
-  const monitorBusyAgents = new Set();
-  let monitorClaudeAdapter = null;
-  let monitorCodexAdapter = null;
-
-  async function loadMonitorEnabled() {
-    try {
-      const raw = await fs.readFile(MONITOR_FLAG_FILE, "utf8");
-      monitorEnabled = JSON.parse(raw)?.enabled === true;
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        logger.error?.("[monitor] load failed:", error);
-      }
-      monitorEnabled = false;
-    }
-  }
-
-  function persistMonitorEnabled() {
-    try {
-      fsSync.mkdirSync(runtimeRoot, { recursive: true });
-      const tmp = `${MONITOR_FLAG_FILE}.tmp`;
-      fsSync.writeFileSync(
-        tmp,
-        JSON.stringify({ enabled: monitorEnabled }, null, 2),
-        "utf8"
-      );
-      fsSync.renameSync(tmp, MONITOR_FLAG_FILE);
-    } catch (error) {
-      logger.error?.("[monitor] persist failed:", error);
-    }
-  }
-
-  function setMonitorEnabled(value) {
-    monitorEnabled = Boolean(value);
-    persistMonitorEnabled();
-    return monitorEnabled;
-  }
-
-  function isMonitorEnabled() {
-    return monitorEnabled;
-  }
-
-  function initMonitorAdapters() {
-    if (!monitorClaudeAdapter) {
-      monitorClaudeAdapter = createClaudeCodeAdapter({ logger });
-    }
-
-    if (!monitorCodexAdapter) {
-      const spawnPrefix =
-        process.platform === "win32"
-          ? ["wsl.exe", "-d", "Ubuntu", "bash", "-lc"]
-          : [];
-      const sessionsRoot = spawnPrefix.length ? null : undefined;
-      monitorCodexAdapter = createCodexAdapter({
-        spawnPrefix,
-        sessionsRoot,
-        logger
-      });
-    }
-  }
-
-  async function pingAgentForMessage(message) {
-    const agent = message.to;
-    if (agent !== "claude" && agent !== "codex") return;
-    if (monitorBusyAgents.has(agent)) return;
-    if (!message.project) return;
-
-    monitorBusyAgents.add(agent);
-    initMonitorAdapters();
-    const adapter = agent === "claude" ? monitorClaudeAdapter : monitorCodexAdapter;
-    const prompt = `Проверь почту проекта ${message.project}: node scripts/mailbox.mjs list --project ${message.project}`;
-
-    try {
-      await adapter.launch({
-        project: message.project,
-        thread: message.thread || "monitor-ping",
-        instruction: prompt
-      });
-    } catch (error) {
-      logger.error?.(
-        `[monitor] ${agent} spawn failed:`,
-        error?.message || error
-      );
-    } finally {
-      monitorBusyAgents.delete(agent);
-    }
-  }
-
-  function runMonitor(pendingList) {
-    if (!monitorEnabled) return;
-    for (const message of pendingList) {
-      if (message.received_at) continue;
-      void pingAgentForMessage(message);
-    }
-  }
-
-  const RESOLVED_STATUSES = new Set(["answered", "no-reply-needed", "superseded"]);
-
-  async function isThreadResolved({ thread, project, since }) {
-    if (!thread || !project) return false;
-    const normalized = normalizeProject(project);
-    const sinceMs = since ? Date.parse(since) : null;
-    const sinceValid = Number.isFinite(sinceMs);
-    try {
-      const archived = await readBucket("archive", mailboxRoot);
-      return archived.some((message) => {
-        if (message.thread !== thread) return false;
-        if (normalizeProject(message.project) !== normalized) return false;
-        if (!RESOLVED_STATUSES.has(message.resolution)) return false;
-        if (sinceValid) {
-          const archivedRaw = message.archived_at || message.metadata?.archived_at;
-          if (!archivedRaw) return false;
-          const archivedMs = Date.parse(archivedRaw);
-          if (!Number.isFinite(archivedMs)) return false;
-          if (archivedMs <= sinceMs) return false;
-        }
-        return true;
-      });
-    } catch (error) {
-      logger.error?.("[supervisor] isThreadResolved read failed:", error);
-      return false;
-    }
   }
 
   async function pollTick() {
@@ -486,17 +171,6 @@ export function createSupervisor({
         });
 
       state.pendingIndex = pending;
-      runMonitor(pending);
-
-      if (orchestrator && typeof orchestrator.processTick === "function") {
-        try {
-          await orchestrator.processTick();
-          await persistTasks();
-        } catch (orchError) {
-          logger.error("[supervisor] orchestrator.processTick failed:", orchError);
-        }
-      }
-
       state.supervisorHealth.lastTickAt = toUtcTimestamp();
       state.supervisorHealth.lastTickMs = Date.now() - startedAt;
 
@@ -512,35 +186,9 @@ export function createSupervisor({
 
   async function start() {
     await fs.mkdir(runtimeRoot, { recursive: true });
-    try {
-      const raw = await fs.readFile(path.join(runtimeRoot, "tasks.json"), "utf8");
-      const persisted = JSON.parse(raw);
-      if (Array.isArray(persisted)) {
-        for (const entry of persisted) {
-          if (!entry || typeof entry.id !== "string") {
-            continue;
-          }
-          const version =
-            typeof entry.schemaVersion === "number" ? entry.schemaVersion : 0;
-          if (version !== TASK_SCHEMA_VERSION) {
-            logger.error(
-              `[supervisor] task ${entry.id} has schemaVersion=${version}, expected ${TASK_SCHEMA_VERSION}; skipping (add migration in future phase)`
-            );
-            continue;
-          }
-          state.taskRegistry.set(entry.id, entry);
-        }
-      }
-    } catch (error) {
-      if (error && error.code !== "ENOENT") {
-        logger.error("[supervisor] tasks.json restore failed:", error);
-      }
-    }
     state.supervisorHealth.startedAt = toUtcTimestamp();
     await persistSessions();
     await persistHealth();
-    await persistTasks();
-    await loadMonitorEnabled();
     await pollTick();
     timer = setInterval(() => {
       void pollTick();
@@ -554,21 +202,5 @@ export function createSupervisor({
     }
   }
 
-  return {
-    router,
-    start,
-    stop,
-    state,
-    addTask,
-    setOrchestrator,
-    transitionTask,
-    stopTask,
-    listTasks,
-    getTask,
-    persistTasks,
-    isThreadResolved,
-    setMonitorEnabled,
-    isMonitorEnabled,
-    loadMonitorEnabled
-  };
+  return { router, start, stop, state };
 }
