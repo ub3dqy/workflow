@@ -279,6 +279,56 @@ app.use("/api/agent", agentRouter);
 
 app.use("/api/runtime", supervisor.router);
 
+app.post("/api/tasks", async (request, response) => {
+  try {
+    const task = supervisor.addTask(request.body || {});
+    await supervisor.persistTasks();
+    response.status(201).json({ task });
+  } catch (error) {
+    response.status(400).json({
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+app.get("/api/tasks", (request, response) => {
+  const project =
+    typeof request.query.project === "string"
+      ? request.query.project.trim()
+      : undefined;
+  const stateFilter =
+    typeof request.query.state === "string"
+      ? request.query.state.trim()
+      : undefined;
+  const tasks = supervisor.listTasks({ project, state: stateFilter });
+  response.setHeader("Cache-Control", "no-store");
+  response.json({ tasks });
+});
+
+app.get("/api/tasks/:id", (request, response) => {
+  const task = supervisor.getTask(request.params.id);
+  if (!task) {
+    response.status(404).json({ error: "task not found" });
+    return;
+  }
+  response.setHeader("Cache-Control", "no-store");
+  response.json({ task });
+});
+
+app.post("/api/tasks/:id/stop", async (request, response) => {
+  try {
+    const reason =
+      typeof request.body?.reason === "string" ? request.body.reason.trim() : "user-stop";
+    const task = supervisor.stopTask(request.params.id, reason || "user-stop");
+    await supervisor.persistTasks();
+    response.json({ task });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message.startsWith("unknown task id") ? 404 : 400;
+    response.status(status).json({ error: message });
+  }
+});
+
 await supervisor.start();
 
 const server = app.listen(port, host, () => {

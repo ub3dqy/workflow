@@ -19,6 +19,7 @@ export function createSupervisor({
   const state = {
     sessions: new Map(),
     pendingIndex: [],
+    taskRegistry: new Map(),
     supervisorHealth: {
       startedAt: null,
       lastTickAt: null,
@@ -133,10 +134,181 @@ export function createSupervisor({
     );
   }
 
+  async function persistTasks() {
+    await atomicWriteJson(
+      path.join(runtimeRoot, "tasks.json"),
+      Array.from(state.taskRegistry.values())
+    );
+  }
+
   async function atomicWriteJson(finalPath, data) {
     const tmpPath = `${finalPath}.tmp`;
     await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
     await fs.rename(tmpPath, finalPath);
+  }
+
+  const TASK_SCHEMA_VERSION = 1;
+
+  const TASK_STATES = new Set([
+    "pending",
+    "launching",
+    "awaiting-reply",
+    "handing-off",
+    "resolved",
+    "failed",
+    "stopped",
+    "max-iter-exceeded"
+  ]);
+
+  const TERMINAL_STATES = new Set([
+    "resolved",
+    "failed",
+    "stopped",
+    "max-iter-exceeded"
+  ]);
+
+  const ALLOWED_TRANSITIONS = {
+    pending: new Set(["launching", "stopped", "failed"]),
+    launching: new Set(["awaiting-reply", "failed", "stopped"]),
+    "awaiting-reply": new Set([
+      "handing-off",
+      "failed",
+      "stopped",
+      "max-iter-exceeded",
+      "resolved"
+    ]),
+    "handing-off": new Set([
+      "awaiting-reply",
+      "resolved",
+      "failed",
+      "stopped",
+      "max-iter-exceeded"
+    ])
+  };
+
+  function buildTaskId(slug) {
+    const ts = toUtcTimestamp()
+      .replace(/[:-]/g, "")
+      .replace(/\..*Z$/, "Z");
+    const safeSlug =
+      String(slug || "task")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .slice(0, 40)
+        .replace(/^-|-$/g, "") || "task";
+    return `task-${ts}-${safeSlug}`;
+  }
+
+  function normalizeAgent(value) {
+    if (value === "claude" || value === "codex") {
+      return value;
+    }
+    return null;
+  }
+
+  function addTask(input) {
+    const project = typeof input.project === "string" ? input.project.trim() : "";
+    if (!project) {
+      throw new Error("task requires project");
+    }
+
+    const initialAgent = normalizeAgent(input.initialAgent);
+    if (!initialAgent) {
+      throw new Error("task requires initialAgent claude|codex");
+    }
+
+    const instruction =
+      typeof input.instruction === "string" ? input.instruction.trim() : "";
+    if (!instruction) {
+      throw new Error("task requires instruction");
+    }
+
+    const maxIter = Number.isFinite(input.maxIterations)
+      ? Math.max(1, Math.min(100, Math.floor(input.maxIterations)))
+      : 10;
+    const now = toUtcTimestamp();
+    const task = {
+      schemaVersion: TASK_SCHEMA_VERSION,
+      id: buildTaskId(input.slug || instruction.slice(0, 40)),
+      project,
+      thread: typeof input.thread === "string" ? input.thread.trim() : "",
+      instruction,
+      initialAgent,
+      currentAgent: null,
+      nextAgent: initialAgent,
+      sessionIds: { claude: "", codex: "" },
+      lastInboundMessageId: "",
+      lastOutboundMessageId: "",
+      iterations: 0,
+      maxIterations: maxIter,
+      state: "pending",
+      stopReason: "",
+      error: "",
+      createdAt: now,
+      lastActivityAt: now,
+      resolvedAt: ""
+    };
+    state.taskRegistry.set(task.id, task);
+    return task;
+  }
+
+  function transitionTask(id, nextState, patch = {}) {
+    const task = state.taskRegistry.get(id);
+    if (!task) {
+      throw new Error(`unknown task id ${id}`);
+    }
+    if (!TASK_STATES.has(nextState)) {
+      throw new Error(`invalid state ${nextState}`);
+    }
+    if (TERMINAL_STATES.has(task.state)) {
+      throw new Error(`task ${id} already terminal (${task.state})`);
+    }
+    const allowed = ALLOWED_TRANSITIONS[task.state];
+    if (!allowed || !allowed.has(nextState)) {
+      throw new Error(`illegal transition ${task.state} → ${nextState} for task ${id}`);
+    }
+    const next = {
+      ...task,
+      ...patch,
+      state: nextState,
+      lastActivityAt: toUtcTimestamp()
+    };
+    if (TERMINAL_STATES.has(nextState) && !next.resolvedAt) {
+      next.resolvedAt = next.lastActivityAt;
+    }
+    state.taskRegistry.set(id, next);
+    return next;
+  }
+
+  function stopTask(id, reason = "user-stop") {
+    const task = state.taskRegistry.get(id);
+    if (!task) {
+      throw new Error(`unknown task id ${id}`);
+    }
+    if (TERMINAL_STATES.has(task.state)) {
+      return task;
+    }
+    return transitionTask(id, "stopped", { stopReason: reason });
+  }
+
+  function listTasks(filters = {}) {
+    const arr = Array.from(state.taskRegistry.values());
+    const { project, state: stateFilter } = filters;
+    return arr
+      .filter((task) => {
+        if (project && task.project !== project) {
+          return false;
+        }
+        if (stateFilter && task.state !== stateFilter) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  function getTask(id) {
+    return state.taskRegistry.get(id) || null;
   }
 
   async function pollTick() {
@@ -186,9 +358,34 @@ export function createSupervisor({
 
   async function start() {
     await fs.mkdir(runtimeRoot, { recursive: true });
+    try {
+      const raw = await fs.readFile(path.join(runtimeRoot, "tasks.json"), "utf8");
+      const persisted = JSON.parse(raw);
+      if (Array.isArray(persisted)) {
+        for (const entry of persisted) {
+          if (!entry || typeof entry.id !== "string") {
+            continue;
+          }
+          const version =
+            typeof entry.schemaVersion === "number" ? entry.schemaVersion : 0;
+          if (version !== TASK_SCHEMA_VERSION) {
+            logger.error(
+              `[supervisor] task ${entry.id} has schemaVersion=${version}, expected ${TASK_SCHEMA_VERSION}; skipping (add migration in future phase)`
+            );
+            continue;
+          }
+          state.taskRegistry.set(entry.id, entry);
+        }
+      }
+    } catch (error) {
+      if (error && error.code !== "ENOENT") {
+        logger.error("[supervisor] tasks.json restore failed:", error);
+      }
+    }
     state.supervisorHealth.startedAt = toUtcTimestamp();
     await persistSessions();
     await persistHealth();
+    await persistTasks();
     await pollTick();
     timer = setInterval(() => {
       void pollTick();
@@ -202,5 +399,16 @@ export function createSupervisor({
     }
   }
 
-  return { router, start, stop, state };
+  return {
+    router,
+    start,
+    stop,
+    state,
+    addTask,
+    transitionTask,
+    stopTask,
+    listTasks,
+    getTask,
+    persistTasks
+  };
 }

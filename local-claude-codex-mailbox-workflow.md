@@ -377,6 +377,23 @@ Original Phase C design предполагал Stop hook script (`mailbox-stop-d
 - Phase C = stateless endpoint only. Consumer pattern choice открыт (SessionStart / external coordinator poll / future UserPromptSubmit).
 - Codex Linux/WSL: reuse endpoint agent-agnostic. Windows native Codex = degraded (manual curl).
 
+### Task Queue (paperclip pivot P1)
+
+Paperclip-light pivot стартует с persistent task queue в supervisor backend (см. `docs/codex-tasks/paperclip-pivot-architecture-plan.md`):
+
+- **Runtime file**: `mailbox-runtime/tasks.json` — atomic write+rename, survives coordinator restart. Schema per architecture §6 P1 (14 fields + 8-state enum).
+- **Endpoints** (user-path, `/api/tasks`):
+  - `POST /api/tasks` — create task with `{project, initialAgent, instruction, thread?, maxIterations?}`
+  - `GET /api/tasks` — list (optional `?project=X&state=Y` filters)
+  - `GET /api/tasks/:id` — detail
+  - `POST /api/tasks/:id/stop` — user stop, transitions к `stopped` state
+- **State machine** (P1 transitions are storage-only; P3 orchestrator добавит active transitions):
+  - `pending → launching → awaiting-reply → handing-off → (awaiting-reply | resolved | failed | stopped | max-iter-exceeded)`
+  - Terminal states: `resolved`, `failed`, `stopped`, `max-iter-exceeded`
+- **UI**: Tasks panel в dashboard — read-only list + Stop button per active task.
+- **Out of scope P1**: adapter launch (P2), orchestrator loop (P3), real agent spawn (P4), coordinator restart recovery (P5+).
+- **Project isolation baseline**: task `project` mandatory, list filter respects query. No new leak vectors; existing follow-up (`memory-claude/wiki/project_isolation_open_followup.md`) post-P4.
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:

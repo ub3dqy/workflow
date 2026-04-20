@@ -1,9 +1,13 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   archiveMessage,
+  createTask,
+  fetchTask,
   fetchMessages,
   fetchRuntimeState,
-  postNote
+  fetchTasks,
+  postNote,
+  stopTask
 } from "./api.js";
 
 const pollIntervalMs = 3000;
@@ -78,7 +82,17 @@ const translations = {
     pendingIndexTitle: "Незабранные сообщения",
     noPendingMessages: "Нет pending-сообщений.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Последний цикл"
+    supervisorLastTick: "Последний цикл",
+    tasksTitle: "Задачи",
+    tasksEmpty: "Задач нет.",
+    tasksStart: "Создать задачу",
+    tasksProjectLabel: "Проект",
+    tasksAgentLabel: "Начинает",
+    tasksInstructionLabel: "Задание",
+    tasksIterationsLabel: "Итерации",
+    tasksStopAction: "Остановить",
+    tasksRefreshAction: "Обновить",
+    tasksStateLabel: "Статус"
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -144,7 +158,17 @@ const translations = {
     pendingIndexTitle: "Undelivered messages",
     noPendingMessages: "No pending messages.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Last tick"
+    supervisorLastTick: "Last tick",
+    tasksTitle: "Tasks",
+    tasksEmpty: "No tasks.",
+    tasksStart: "Start task",
+    tasksProjectLabel: "Project",
+    tasksAgentLabel: "Starts",
+    tasksInstructionLabel: "Instruction",
+    tasksIterationsLabel: "Iterations",
+    tasksStopAction: "Stop",
+    tasksRefreshAction: "Refresh",
+    tasksStateLabel: "State"
   }
 };
 
@@ -610,6 +634,86 @@ const styles = `
     margin: 0;
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .tasksPanel {
+    margin: 0 0 24px;
+    padding: 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    background: var(--surface-stat);
+  }
+
+  .tasksHeader h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-accent);
+  }
+
+  .tasksList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+
+  .tasksItem {
+    padding: 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: var(--surface);
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .tasksTopRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tasksIdMono {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.7;
+  }
+
+  .tasksInstruction {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .tasksMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+  }
+
+  .tasksStopButton {
+    justify-self: start;
+    padding: 4px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .tasksStopButton:hover {
+    background: var(--surface-stat);
   }
 
   .grid {
@@ -1276,6 +1380,10 @@ export default function App() {
     pendingIndex: [],
     supervisorHealth: { lastTickAt: null, tickErrors: 0 }
   });
+  const [tasksState, setTasksState] = useState({
+    tasks: [],
+    lastUpdatedAt: null
+  });
   const [messages, setMessages] = useState(emptyData);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -1336,6 +1444,32 @@ export default function App() {
       } catch (loadError) {
         if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
           // Runtime visibility is non-fatal for the main dashboard.
+        }
+      }
+    }
+
+    void load();
+    const intervalId = window.setInterval(load, pollIntervalMs);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const data = await fetchTasks({}, controller.signal);
+        setTasksState({
+          tasks: Array.isArray(data.tasks) ? data.tasks : [],
+          lastUpdatedAt: new Date().toISOString()
+        });
+      } catch (loadError) {
+        if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
+          // non-fatal
         }
       }
     }
@@ -1728,6 +1862,63 @@ export default function App() {
                 ? formatTimestamp(runtimeState.supervisorHealth.lastTickAt, lang, t)
                 : "—"}
             </p>
+          </section>
+
+          <section className="tasksPanel">
+            <div className="tasksHeader">
+              <h2>{t.tasksTitle} ({tasksState.tasks.length})</h2>
+            </div>
+            {tasksState.tasks.length === 0 ? (
+              <p className="columnHint">{t.tasksEmpty}</p>
+            ) : (
+              <ul className="tasksList">
+                {tasksState.tasks.map((task) => (
+                  <li key={task.id} className="tasksItem">
+                    <div className="tasksTopRow">
+                      <span className="chip">{task.state}</span>
+                      <span className="chip chipProject">{task.project}</span>
+                      <span className="chip">
+                        {task.currentAgent || task.nextAgent || task.initialAgent}
+                      </span>
+                      <span className="mono tasksIdMono">{task.id}</span>
+                    </div>
+                    <div className="tasksInstruction">{task.instruction}</div>
+                    <div className="tasksMeta">
+                      <span>
+                        {t.tasksIterationsLabel}: {task.iterations}/{task.maxIterations}
+                      </span>
+                      <span className="timestamp">
+                        {formatTimestamp(task.lastActivityAt || task.createdAt, lang, t)}
+                      </span>
+                      {task.stopReason ? (
+                        <span className="chip">{task.stopReason}</span>
+                      ) : null}
+                    </div>
+                    {task.state !== "resolved" &&
+                    task.state !== "failed" &&
+                    task.state !== "stopped" &&
+                    task.state !== "max-iter-exceeded" ? (
+                      <button
+                        type="button"
+                        className="tasksStopButton"
+                        onClick={async () => {
+                          try {
+                            await stopTask(task.id);
+                            const data = await fetchTasks({});
+                            setTasksState({
+                              tasks: Array.isArray(data.tasks) ? data.tasks : [],
+                              lastUpdatedAt: new Date().toISOString()
+                            });
+                          } catch {}
+                        }}
+                      >
+                        {t.tasksStopAction}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {error ? (
