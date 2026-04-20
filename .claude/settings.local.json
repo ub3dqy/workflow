@@ -24,11 +24,6 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/mailbox-session-register.mjs\" --project workflow",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/mailbox-stop-delivery.mjs\" --project workflow",
-            "timeout": 5
           }
         ]
       }

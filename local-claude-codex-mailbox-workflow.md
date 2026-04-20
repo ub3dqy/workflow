@@ -360,25 +360,22 @@ Claude Code автоматически регистрирует свою session
 - Lease/claim multi-window protection — отдельная следующая фаза.
 - `UserPromptSubmit` **не используется**.
 
-### Phase C — Delivery signals (Claude)
+### Phase C — Agent delivery endpoint (consumer-agnostic)
 
-Supervisor matches active sessions ↔ pending mail и сигнализирует агенту при Stop:
+Supervisor exposes agent-scoped pending index через:
 
-- **`GET /api/agent/runtime/deliveries?session_id=X&project=Y`** — agent-path endpoint (consistent spec L304 mandatory-project rule). Validates: (a) both query params required (400); (b) session exists в supervisor state (404); (c) `session.project === query.project` (403 — protection against accidental `--project` flag mismatch в hook config; **НЕ** защита от foreign-session discovery через global `/api/runtime/state` — single-user localhost trust model); (d) session active по TTL. Возвращает pendingIndex entries где `to === session.agent && project === session.project && deliverable === true`. Expired session → empty array + `session_expired: true`. **No mutation** — stateless read.
+- **`GET /api/agent/runtime/deliveries?session_id=X&project=Y`** — agent-path endpoint (consistent spec L304 mandatory-project rule). Validates: (a) both query params required (400); (b) session exists в supervisor state (404); (c) `session.project === query.project` (403 — protection against accidental `--project` flag mismatch; **НЕ** защита от foreign-session discovery через global `/api/runtime/state` — single-user localhost trust model); (d) session active по TTL. Возвращает pendingIndex entries где `to === session.agent && project === session.project && deliverable === true`. Expired session → empty array + `session_expired: true`. **No mutation** — stateless read.
 
-  **Trust model**: dashboard runs localhost-only (127.0.0.1:3003). `/api/runtime/state` globally exposes все active sessions (rail #2 single-dashboard requirement). Agent isolation = **logical separation** (hook script configured с explicit `--project` flag per repo) + **content-level scope** в response (deliveries filter by `session.agent + project`). Real multi-user/adversarial hardening (auth, per-session tokens) — future work beyond Phase C/D.
-- **Stop hook `mailbox-stop-delivery.mjs --project <repo>`** — на end-of-turn читает stdin `session_id` + CLI `--project` flag (per-repo opt-in), GET `/api/agent/runtime/deliveries` с обоими params. Если non-empty → stdout JSON `hookSpecificOutput.additionalContext` с текстом «Есть N писем по project X: [thread] from codex, ... Проверь почту.». Текст injected в transcript, agent на next turn инициирует `check mail` workflow.
-- **No auto-execution**: hook только signals — agent сам decides что и когда читать.
-- **Silent fail**: supervisor down / 400 / 403 / 404 / empty → Stop hook exits 0 без injection. Agent session нормально completes.
+  **Trust model**: dashboard runs localhost-only (127.0.0.1:3003). `/api/runtime/state` globally exposes все active sessions (rail #2 single-dashboard requirement). Agent isolation = **logical separation** (hook script configured с explicit `--project` flag per repo) + **content-level scope** в response (deliveries filter by `session.agent + project`). Real multi-user/adversarial hardening (auth, per-session tokens) — future work.
+
+**Known limitation — Stop hook injection path deprecated**:
+Original Phase C design предполагал Stop hook script (`mailbox-stop-delivery.mjs`) с stdout JSON `hookSpecificOutput.additionalContext` → injection в transcript. Empirical testing + re-reading official Claude Code hooks docs подтвердили: **`additionalContext` поддерживается только в `UserPromptSubmit` и `SessionStart` hooks**. В Stop hook этот field игнорируется — Stop hook имеет только `decision: "block"` + `reason` control. Следовательно original Stop-based injection flow не работает. Script и settings entry удалены; endpoint остаётся для future consumers (external coordinator polling, SessionStart enhancements).
+
+**Working inject path**: только `SessionStart` hook (см. `scripts/mailbox-status.mjs`) — fires at session start/resume, additionalContext officially supported + verified в runtime.
 
 **Scope boundaries**:
-- Phase C = signal only. No claim, no lease, no expiration tracking → все это Phase D.
-- Same delivery виден agent'у каждый Stop, пока message не archived/received. Дедупликация — Phase D.
-- Multi-window: если two Claude Code окна открыты по одному project, оба увидят тот же delivery. Acceptable — signal не действие. Phase D lease prevents double-claim.
-
-**Codex hooks**:
-- Linux/WSL: reuse `/deliveries` endpoint — agent-agnostic. Отдельный script + config когда Codex hooks ship Linux support.
-- Windows native Codex: degraded (rail #7). Может вручную `curl` GET `/api/runtime/deliveries?session_id=<id>` для same data.
+- Phase C = stateless endpoint only. Consumer pattern choice открыт (SessionStart / external coordinator poll / future UserPromptSubmit).
+- Codex Linux/WSL: reuse endpoint agent-agnostic. Windows native Codex = degraded (manual curl).
 
 ### Timestamp rule
 
