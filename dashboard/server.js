@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOrchestrator } from "./orchestrator.mjs";
 import { createSupervisor } from "./supervisor.mjs";
+import { createClaudeCodeAdapter } from "../scripts/adapters/claude-code-adapter.mjs";
 import { createMockAdapter } from "../scripts/adapters/mock-adapter.mjs";
 import {
   archiveMessageFile,
@@ -182,9 +183,20 @@ const supervisor = createSupervisor({
   pollIntervalMs: 3000,
   logger: console
 });
-const orchestratorAdapter = createMockAdapter({
-  recordCallsTo: path.join(runtimeRoot, "orchestrator-mock-calls.json")
-});
+const adapterKind = (process.env.DASHBOARD_ADAPTER || "mock").toLowerCase();
+let orchestratorAdapter;
+if (adapterKind === "claude-code") {
+  orchestratorAdapter = createClaudeCodeAdapter({
+    recordCallsTo: path.join(runtimeRoot, "orchestrator-claude-calls.json"),
+    logger: console
+  });
+  console.log("[bootstrap] adapter=claude-code (real)");
+} else {
+  orchestratorAdapter = createMockAdapter({
+    recordCallsTo: path.join(runtimeRoot, "orchestrator-mock-calls.json")
+  });
+  console.log("[bootstrap] adapter=mock");
+}
 const orchestrator = createOrchestrator({
   supervisor,
   adapter: orchestratorAdapter,
@@ -346,9 +358,14 @@ const server = app.listen(port, host, () => {
   console.log(`Server listening on ${host}:${port}`);
 });
 
-function shutdown(signal) {
+async function shutdown(signal) {
   process.stderr.write(`[server] ${signal} received, shutting down\n`);
   orchestrator.stop();
+  try {
+    await orchestratorAdapter.shutdown({ force: false });
+  } catch (error) {
+    process.stderr.write(`[server] adapter.shutdown error: ${error.message}\n`);
+  }
   supervisor.stop();
   if (typeof server.closeAllConnections === "function") {
     server.closeAllConnections();
@@ -363,5 +380,9 @@ function shutdown(signal) {
   }, 3000);
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});

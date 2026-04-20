@@ -429,6 +429,27 @@ Paperclip-light coordinator loop wired между task queue (P1) и adapter int
 - **Observability**: `supervisorHealth.{taskTicksProcessed, taskTransitions, taskCyclesCompleted, taskAdapterErrors}` counters.
 - **Adapter plug-in**: P3 uses MockAdapter (from P2) for deterministic cycle testing. P4 replaces it with real ClaudeCodeAdapter + CodexAdapter.
 
+### ClaudeCodeAdapter (paperclip pivot P4a)
+
+`createClaudeCodeAdapter({claudePath, permissionMode, outputFormat, maxTurns, spawnTimeoutMs, appendSystemPrompt, tools, recordCallsTo, logger})` returns the P2 AgentAdapter shape against real Claude Code CLI.
+
+Invocation model: one `child_process.spawn` per turn (Claude CLI doesn't support mid-stream injection per docs). First turn uses `claude -p --session-id <UUID> "<instruction>"`; subsequent turns use `claude -p -r <UUID> "<message>"`. All turns include `--output-format json --permission-mode bypassPermissions --max-turns 30` for deterministic headless execution.
+
+Bootstrap gate: `dashboard/server.js` reads `DASHBOARD_ADAPTER` env (default `mock`; set to `claude-code` for real adapter). Mock remains the default for CI + smoke. Switching requires dashboard restart.
+
+Shutdown: SIGINT/SIGTERM handlers in `dashboard/server.js` invoke `orchestrator.stop()` → `await orchestratorAdapter.shutdown({force:false})` → `supervisor.stop()`, so active Claude children receive SIGTERM (with 5s `.unref()`-scheduled SIGKILL escalation) instead of outliving the coordinator. This applies к both adapter kinds — mock treats shutdown() as fast no-op.
+
+Methods:
+- `launch` → fresh UUID via crypto.randomUUID or caller-provided; spawn with `--session-id`. Records into internal Map for collision detection (mirrors mock F2 fix).
+- `resume` / `injectMessage` → spawn with `-r <sessionId>` + new message; injectMessage delegates to resume per research §1.2.
+- `shutdown` → marks session slot terminated AND sweeps adapter-tracked activeSpawns set with SIGTERM (or SIGKILL if `force=true`), ensuring mid-turn children don't outlive coordinator SIGINT.
+- `isAlive` → checks adapter-local Map slot state.
+- `attachExisting` → stub `{attached: false}` (P5+ if session file discovery API surfaces).
+- `parseCompletionSignal` → parses `--output-format json` response; falls back to text heuristic.
+- `classifyCrash` → maps exit code + stderr to {env|auth|timeout|agent-error|unknown} + retriable flag.
+
+CodexAdapter (P4b) deferred until live probe closes R-OQ-3/4/5 (Codex initial prompt flag, session resume, output format).
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:
