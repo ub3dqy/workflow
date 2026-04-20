@@ -143,6 +143,23 @@ Node `child_process.spawn("wsl.exe", ["-d", "Ubuntu", "bash", "-lc", cmd])` patt
 
 All flagged для **P4 live probe** при real adapter implementation.
 
+### §2.1 Live-probe findings (2026-04-20)
+
+R-OQ-3/4/5/6 resolved via mailbox thread `paperclip-p4b-codex-adapter-live-probe` (2 Codex reply letters, archived).
+
+- **Initial prompt delivery** (R-OQ-3): `codex exec [PROMPT]` positional argument (NOT `-p`, NOT `--prompt`). Stdin `-` accepted. Bare `codex "prompt"` wrongly attempts TUI and errors «stdin is not a terminal».
+- **Session resume** (R-OQ-4): `codex exec resume <session-id>|--last "<prompt>"` — resume is subcommand **inside exec**, not global. Global `codex resume` requires TTY and is interactive-only.
+- **Output format** (R-OQ-5): **corrected post-Codex-R1 adversarial finding** — `codex exec --help` exposes **`--json`** flag and **`-o, --output-last-message <FILE>`** (and similarly on `codex exec resume --help`). Initial probe 4 missed these because it grep'd only global `codex --help`, not exec subcommand. Adapter sets `useJsonOutput=true` default and passes `--json` flag; parseCompletionSignal parses JSON payload (any valid JSON with content = completion signal), fallback к text heuristic if parse fails.
+- **Config / model / sandbox flags** (R-OQ-6): `-c key=value` override, `-m --model`, `-s --sandbox <read-only|workspace-write|danger-full-access>`. `~/.codex/config.toml` as default source.
+- **Session storage**: `~/.codex/sessions/YYYY/…` observed; exact per-session filename structure opaque. Adapter learns ID by directory-diff before/after first exec.
+- **Exit codes observed**: 0 = success; 124 = timeout (from `timeout`-style wrapper OR model hang); «stdin is not a terminal» prints to stderr с exit 0 when wrong invocation style used (confusing — adapter classifyCrash treats this as env/non-retriable).
+- **No `--max-turns`**: no turn cap analogue to Claude CLI — adapter relies on wall-clock timeout only.
+- **Windows-native**: remains disabled per rail #7; WSL wrapper required.
+
+Empirical gaps (Phase 2 validation):
+- Probe 6B hit EXIT=124 — session-write на exec success not empirically confirmed (docs imply, but timeout cut short).
+- SIGTERM/SIGKILL propagation through `wsl.exe` wrapper к inner codex process not tested live.
+
 ---
 
 ## §3 Process lifecycle gotchas (both agents)
@@ -316,8 +333,6 @@ P3 orchestrator development uses MockAdapter → not blocked by R-OQ-3/4/5. P4 r
 2. P3: orchestrator wires interface calls against MockAdapter. All 8 methods exercised.
 3. P4: ClaudeCodeAdapter implemented first (all CLI primitives documented). CodexAdapter after live probe closes R-OQ-3/4/5.
 4. P5+: refinements based on real adapter observations — interface может nedry expand (additive, non-breaking).
-
----
 
 ## §8 Non-negotiable invariants
 

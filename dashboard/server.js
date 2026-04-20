@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createOrchestrator } from "./orchestrator.mjs";
 import { createSupervisor } from "./supervisor.mjs";
 import { createClaudeCodeAdapter } from "../scripts/adapters/claude-code-adapter.mjs";
+import { createCodexAdapter } from "../scripts/adapters/codex-adapter.mjs";
 import { createMockAdapter } from "../scripts/adapters/mock-adapter.mjs";
 import {
   archiveMessageFile,
@@ -191,6 +192,18 @@ if (adapterKind === "claude-code") {
     logger: console
   });
   console.log("[bootstrap] adapter=claude-code (real)");
+} else if (adapterKind === "codex") {
+  const spawnPrefix = process.platform === "win32"
+    ? ["wsl.exe", "-d", "Ubuntu", "bash", "-lc"]
+    : [];
+  const sessionsRoot = spawnPrefix.length ? null : undefined;
+  orchestratorAdapter = createCodexAdapter({
+    spawnPrefix,
+    sessionsRoot,
+    recordCallsTo: path.join(runtimeRoot, "orchestrator-codex-calls.json"),
+    logger: console
+  });
+  console.log(`[bootstrap] adapter=codex (real${spawnPrefix.length ? ", via WSL, sessions --last fallback only" : ""})`);
 } else {
   orchestratorAdapter = createMockAdapter({
     recordCallsTo: path.join(runtimeRoot, "orchestrator-mock-calls.json")

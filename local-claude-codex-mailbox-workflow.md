@@ -450,6 +450,21 @@ Methods:
 
 CodexAdapter (P4b) deferred until live probe closes R-OQ-3/4/5 (Codex initial prompt flag, session resume, output format).
 
+### CodexAdapter (paperclip pivot P4b)
+
+`createCodexAdapter({codexPath, spawnPrefix, spawnTimeoutMs, model, sandboxMode, sessionsRoot, configOverrides, recordCallsTo, logger, env})` returns the P2 AgentAdapter shape against real Codex CLI.
+
+Invocation model: single `child_process.spawn` per turn. Codex CLI is **WSL-only** per architecture rail #7; on Windows the adapter wraps spawn through `wsl.exe -d Ubuntu -- bash -lc "…"` via `spawnPrefix`. First turn uses `codex exec --json "<instruction>"` (positional PROMPT per live probe 2026-04-20; `--json` per `codex exec --help` F8 post-R1 correction); subsequent turns use `codex exec resume <codexSessionId|--last> --json "<message>"`. `--json` is default via `useJsonOutput: true` option — deterministic JSON parse path in parseCompletionSignal; text heuristic retained as fallback.
+
+Key differences vs P4a ClaudeCodeAdapter:
+- No `--session-id UUID`: adapter learns Codex-side session id by diffing `~/.codex/sessions/` listing before/after first exec.
+- No `--max-turns`: wall-clock `spawnTimeoutMs` (default **10 min**) is only safety — probes showed 2-min default too short for cold-start.
+- JSON output via `--json` (exec subcommand level, not global) — exact schema opaque, adapter treats any valid JSON with content as completion signal; text branch remains fallback.
+
+Bootstrap: `DASHBOARD_ADAPTER=codex` в env. Windows coordinator auto-wraps к WSL.
+
+CodexAdapter methods otherwise mirror the P4a contract — launch / resume (routed through `exec resume`) / shutdown (activeSpawns SIGTERM+SIGKILL sweep с `.unref()` timers) / isAlive (Map slot) / attachExisting (stub) / injectMessage (alias to resume) / parseCompletionSignal (json primary / text fallback) / classifyCrash (7-step first-match — stderr anomalies precede exit 0 default; exit 124 → timeout).
+
 ### Timestamp rule
 
 Все временные поля в mailbox должны быть:
