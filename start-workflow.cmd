@@ -25,6 +25,10 @@ if "!NEED_INSTALL!"=="1" (
   call npm install --no-audit --no-fund
   if errorlevel 1 exit /b 1
   copy /y package-lock.json "%STAMP%" >nul
+  rem Backfill Linux binding so Codex (WSL) build won't fail after Windows npm install.
+  rem Uses --no-save to keep the lockfile stable; install is cross-platform optional dep.
+  echo Backfilling Linux rolldown binding for WSL side...
+  call npm install --no-audit --no-fund --no-save --force @rolldown/binding-linux-x64-gnu @rolldown/binding-linux-x64-musl 2>nul
 )
 
 echo Building dashboard...
