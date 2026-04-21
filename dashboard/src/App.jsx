@@ -150,15 +150,28 @@ const translations = {
   }
 };
 
+let audioCtxSingleton = null;
+
+function getAudioContext() {
+  if (audioCtxSingleton) return audioCtxSingleton;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  audioCtxSingleton = new AudioCtx();
+  return audioCtxSingleton;
+}
+
 function playNotificationChime() {
   try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      void ctx.resume().catch(() => {});
+    }
     // Pleasant rising arpeggio: C5 E5 G5 C6 (C major)
     const notes = [523.25, 659.25, 783.99, 1046.5];
     const noteSpacing = 0.4;
     const noteDuration = 1.0;
+    const baseTime = ctx.currentTime + 0.05;
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -166,17 +179,13 @@ function playNotificationChime() {
       osc.frequency.value = freq;
       osc.connect(gain);
       gain.connect(ctx.destination);
-      const startTime = ctx.currentTime + i * noteSpacing;
+      const startTime = baseTime + i * noteSpacing;
       gain.gain.setValueAtTime(0, startTime);
       gain.gain.linearRampToValueAtTime(0.18, startTime + 0.04);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + noteDuration);
       osc.start(startTime);
       osc.stop(startTime + noteDuration);
     });
-    setTimeout(
-      () => ctx.close().catch(() => {}),
-      (notes.length * noteSpacing + noteDuration + 0.2) * 1000
-    );
   } catch {}
 }
 
@@ -1372,30 +1381,31 @@ export default function App() {
     } catch {}
   }, [soundEnabled]);
 
-  // WebAudio unlock: AudioContext suspended until user gesture (browser AutoPlay policy).
-  // Attach one-time listeners on document for click/keydown to resume context so subsequent
-  // playNotificationChime() invocations play reliably.
+  // WebAudio unlock: resume the singleton AudioContext on first user gesture so that
+  // subsequent playNotificationChime() invocations (triggered by polling, not gesture)
+  // play reliably. Browser autoplay-policy requires resume() в user-gesture callback.
   useEffect(() => {
     let unlocked = false;
     const unlock = () => {
       if (unlocked) return;
       unlocked = true;
       try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
+        const ctx = getAudioContext();
+        if (ctx && ctx.state === "suspended") {
           void ctx.resume().catch(() => {});
-          setTimeout(() => ctx.close().catch(() => {}), 100);
         }
       } catch {}
       document.removeEventListener("click", unlock);
       document.removeEventListener("keydown", unlock);
+      document.removeEventListener("touchstart", unlock);
     };
     document.addEventListener("click", unlock);
     document.addEventListener("keydown", unlock);
+    document.addEventListener("touchstart", unlock);
     return () => {
       document.removeEventListener("click", unlock);
       document.removeEventListener("keydown", unlock);
+      document.removeEventListener("touchstart", unlock);
     };
   }, []);
 
