@@ -1,44 +1,60 @@
-# Workflow — dual-agent development workflow
+# Workflow — sequential Claude↔Codex development workflow
 
 [English](./README.md) | [Русский](./README.ru.md)
 
 [![CI](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml) [![Node](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](./dashboard/package.json)
 
-> Two AI agents, one repo. **Claude** plans, **Codex** executes, **you** decide. This repo gives them a shared mailbox, a dashboard to see what's happening, and a rule book that keeps them honest.
+> Two AI agents, one repo. **Claude** plans and executes, **Codex** synthesizes, reviews, and verifies, **you** decide. The repo gives them a mailbox transport, tracked artifacts, and a dashboard that shows mailbox state.
 
 ---
 
-## 📬 What is this?
+## What This Repo Is
 
-A practical workflow для coordinating **two AI coding assistants** (Claude Code + OpenAI Codex CLI) через shared filesystem mailbox. Instead of copy-pasting context between terminals, agents write markdown messages to each other. You stay в the loop через a local dashboard showing pending threads.
+This repository documents and implements a sequential two-agent workflow for **Claude Code** and **OpenAI Codex CLI**.
 
-**In short**:
-- Claude writes plans (`docs/codex-tasks/<slug>.md`)
-- Codex reads plan → executes → fills report
-- You review diff → commit → push
-- Along the way, mailbox captures any back-and-forth (questions, clarifications) without cluttering git history
+Current contract:
 
-## 🎯 Why use it?
+- the same original task is given to both agents
+- both agents produce independent initial results
+- Codex synthesizes a technical assignment from both results
+- Claude builds the tracked planning/execution package and executes only after Codex agreement
+- Codex performs final verification and writes the Work Verification Report
+- Claude↔Codex coordination happens through `agent-mailbox/`
 
-- **Less copy-paste tax** — agents communicate async через files, not через your clipboard
-- **Clear handoffs** — every non-trivial task has a plan + planning-audit + execution report (three-file pattern)
-- **You're always the gate** — agents never commit, push, or make scope decisions solo
-- **Reproducible** — markdown on disk beats ephemeral chat; any agent joining session reads recent mailbox
+Canonical workflow source: [docs/codex-system-prompt.md](./docs/codex-system-prompt.md).
 
-## 🖼️ Dashboard preview
+## Why Use It
+
+- **Mailbox instead of relay friction**: agent-to-agent coordination is file-based and durable
+- **Evidence-first review**: Codex is a real review/verification gate, not a passive executor
+- **Tracked implementation package**: live tasks keep a stable tracked artifact set in `docs/codex-tasks/`
+- **User stays the decision gate**: commit, push, merge, and design choices still need explicit user approval
+
+## Tracked Artifacts
+
+For a live task, the expected tracked files are:
+
+- `docs/codex-tasks/<slug>.md`
+- `docs/codex-tasks/<slug>-planning-audit.md`
+- `docs/codex-tasks/<slug>-report.md`
+- `docs/codex-tasks/<slug>-work-verification.md`
+
+Important: most existing `docs/codex-tasks/*.md` files are historical archive from earlier workflow revisions. They remain useful as evidence, but they are not the current template unless explicitly marked current.
+
+## Dashboard Preview
 
 ![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
 
-*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), light/dark themes, tab-title badge + favicon для pending count, и audio chime с mute toggle когда приходит новое сообщение.*
+*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), light/dark themes, tab-title badge + favicon for pending count, and optional audio notification.*
 
 ---
 
-## ⚡ Quick start
+## Quick Start
 
 ### Requirements
 
-- **Node.js 20.19+** (tested on 20.19, 22.x, 24.x; 18.x technically works but shows install warnings)
-- **Windows** or **WSL2 Linux** (launchers Windows-only, CLI/dashboard cross-platform)
+- **Node.js 20.19+**
+- **Windows** or **WSL2 Linux**
 - **Git**
 
 ### Setup
@@ -49,9 +65,8 @@ cd workflow/dashboard
 npm install
 ```
 
-### Launch dashboard
+### Launch the dashboard
 
-**Any platform**:
 ```bash
 cd dashboard
 npm run dev
@@ -59,108 +74,97 @@ npm run dev
 # API: http://127.0.0.1:3003
 ```
 
-**Windows one-click** (optional):
-```
-start-workflow.cmd        # starts dashboard, smart npm install caching
-stop-workflow.cmd         # releases ports
-start-workflow-hidden.vbs # hides console window (shortcut-friendly)
+Optional Windows launchers:
+
+```text
+start-workflow.cmd
+stop-workflow.cmd
+start-workflow-hidden.vbs
 ```
 
-### Send a message (CLI)
+### Agent-side mailbox CLI
+
+These commands are for **bound agent sessions**. Agent-path CLI requires explicit `--project` and the current session must already be bound to that project.
 
 ```bash
-# From workflow repo root:
 node scripts/mailbox.mjs send \
-  --from claude --to codex \
+  --from claude \
+  --to codex \
   --thread my-question \
-  --body "Нужен clarifying detail по pre-flight step 3"
+  --project workflow \
+  --body "Need clarification on verification step 3"
 
-# Auto-detects project from cwd basename; --project overrides
-node scripts/mailbox.mjs list --bucket to-codex
-node scripts/mailbox.mjs reply --to to-codex/<filename>.md --body "response"
-node scripts/mailbox.mjs archive --path to-claude/<filename>.md --resolution answered
+node scripts/mailbox.mjs list --bucket to-codex --project workflow
+
+node scripts/mailbox.mjs reply \
+  --from codex \
+  --project workflow \
+  --to to-codex/<filename>.md \
+  --body "Response"
+
+node scripts/mailbox.mjs archive \
+  --path to-claude/<filename>.md \
+  --project workflow \
+  --resolution no-reply-needed
 ```
 
-See [`local-claude-codex-mailbox-workflow.md`](./local-claude-codex-mailbox-workflow.md) для full protocol.
+See [local-claude-codex-mailbox-workflow.md](./local-claude-codex-mailbox-workflow.md) for the full protocol.
 
 ---
 
-## 🧠 Teaching agents about the mailbox
-
-The dashboard только visualizes — agents need to know mailbox exists и как им пользоваться. Without this step дашборд останется пустым: агенты просто не догадаются проверять и отправлять сообщения. Choose one:
-
-- **Session-start prompt** — подготовьте короткую инструкцию с CLI commands (`send`, `list`, `reply`, `archive`, `recover`) и попросите агента читать её в начале каждой сессии. База: [`local-claude-codex-mailbox-workflow.md`](./local-claude-codex-mailbox-workflow.md).
-- **Persistent knowledge base** *(recommended)* — добавьте раздел `agent mail` в свою LLM wiki / memory system. SessionStart hook или context injection подтягивает его в каждую сессию автоматически — агенты проверяют inbox, отвечают и архивируют без ручного напоминания. Такой раздел должен покрывать triggers (`прочитай почту`, `ответь`, `архивируй`), inbox handling default, chat-reporting policy и typовые CLI-паттерны.
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
-    U[👤 User]
-    C[🤖 Claude<br/>planner]
-    X[🤖 Codex<br/>executor]
-    M[(📬 Mailbox<br/>agent-mailbox/)]
-    D[📋 Handoff<br/>docs/codex-tasks/]
-    W[🖥️ Dashboard<br/>127.0.0.1:9119]
+    U[User]
+    C[Claude<br/>planning + execution]
+    X[Codex<br/>synthesis + review + verification]
+    M[(Mailbox<br/>agent-mailbox/)]
+    D[(Tracked Artifacts<br/>docs/codex-tasks/)]
+    W[Dashboard<br/>127.0.0.1:9119]
 
-    U -->|scope + commit| C
-    U -->|scope + commit| X
-    C -->|3-file handoff| D
-    D --> X
-    C <-->|async Q&A| M
-    X <-->|async Q&A| M
+    U -->|same original task| C
+    U -->|same original task| X
+    C -->|initial result / package refs| M
+    X -->|synthesized spec / remarks / verdict| M
+    C -->|plan + audit + report| D
+    X -->|work verification report| D
     M --> W
-    W -.->|dashboard UI| U
 ```
 
-**Roles** (non-negotiable):
+## Roles
 
-| Who | Does | Doesn't |
-|-----|------|---------|
-| **Claude** | Plans, reviews, writes docs | Runs production code, commits |
-| **Codex** | Executes per plan, fills report | Changes scope, commits/pushes |
-| **User** | Approves scope, commits, pushes | Writes code (agents do that) |
+| Role | Responsibility | Must not do |
+|---|---|---|
+| **Claude** | Independent initial result, tracked package creation, execution, git actions on explicit user command | Start execution before Codex agreement, bypass mailbox, invent evidence |
+| **Codex** | Independent initial result, synthesis, planning review, final verification, Work Verification Report | Execute implementation, commit/push, approve without checking |
+| **User** | Original task, decisions, git authorization | Serve as the required transport layer between agents |
 
-**Two communication channels coexist**:
+## Current Docs
 
-| Channel | Location | Purpose | Git-tracked? |
-|---------|----------|---------|--------------|
-| **Formal handoff** | `docs/codex-tasks/` | Contracts: plan + planning-audit + report | Yes (immutable history) |
-| **Informal mailbox** | `agent-mailbox/` | Async Q&A, clarifications, status updates | No (scratchpad) |
+- [AGENTS.md](./AGENTS.md) — repo-level summary
+- [CLAUDE.md](./CLAUDE.md) — project conventions
+- [workflow-role-distribution.md](./workflow-role-distribution.md) — durable role split
+- [workflow-instructions-claude.md](./workflow-instructions-claude.md) — Claude guide
+- [workflow-instructions-codex.md](./workflow-instructions-codex.md) — Codex guide
+- [local-claude-codex-mailbox-workflow.md](./local-claude-codex-mailbox-workflow.md) — mailbox protocol
 
-Detailed rules:
-- [`CLAUDE.md`](./CLAUDE.md) — project conventions
-- [`workflow-instructions-claude.md`](./workflow-instructions-claude.md) — planner role guide
-- [`workflow-instructions-codex.md`](./workflow-instructions-codex.md) — executor role guide
-- [`workflow-role-distribution.md`](./workflow-role-distribution.md) — role separation rules
-- [`local-claude-codex-mailbox-workflow.md`](./local-claude-codex-mailbox-workflow.md) — mailbox protocol spec
+## CI And Safety
 
----
+GitHub Actions runs:
 
-## 🔒 CI & safety
+- `build` — `npm ci && npx vite build`
+- `personal-data-check` — regex scan for accidental PII and hostname leaks
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR:
+Before any push, run the same personal-data scan locally.
 
-- **`build`** — `npm ci && npx vite build` (Node 24)
-- **`personal-data-check`** — regex scan for accidental PII/hostname leaks
+## Contributing
 
-Agents run a matching scan locally before `git push` — catches issues before they hit the public repo.
+1. Propose scope before meaningful changes.
+2. Follow the current contract in `docs/codex-system-prompt.md` and the workflow docs above.
+3. Treat older `docs/codex-tasks/*.md` as archive unless explicitly marked current.
+4. Keep one logical change per commit.
 
-## 📄 License
+## License
 
 [MIT](./LICENSE) © 2026 UB3DQY.
-
-## 🤝 Contributing
-
-Issues и PRs welcome. Workflow expects:
-
-1. Propose scope to maintainer (open an issue first)
-2. Follow three-file handoff pattern для non-trivial changes (see `docs/codex-tasks/` examples)
-3. Personal data scan clean before push (CI enforces)
-4. One logical change per commit
-
----
-
-*Screenshot captured 2026-04-17; UI may evolve.*

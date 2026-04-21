@@ -214,3 +214,12 @@ Procedure: `claude-plan-creation-procedure.md` v1
 Baseline: HEAD=`f2e76ee`
 Input: Phase A (commit `2927af7`) + Phase B (commit `f2e76ee`) + ТЗ §«Phase C: Delivery signal»
 Status: **skeleton (Step 2 complete)** → Steps 3-11 proceeding per NO-STOP DISCIPLINE
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

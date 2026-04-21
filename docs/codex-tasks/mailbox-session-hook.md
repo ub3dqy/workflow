@@ -218,3 +218,12 @@ rm -rf E:/Project/workflow/scripts E:/Project/workflow/.claude
 4. **Тестовые сообщения**: создать для теста, удалить после smokes.
 5. **Encoding**: файлы в agent-mailbox могут иметь CRLF (Windows) или LF (WSL). Regex должен обрабатывать оба.
 6. **Exit code**: всегда 0. Ошибки — silent (stderr допустим, но не stdout). Hook не должен ломать сессию.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

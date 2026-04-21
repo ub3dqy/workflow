@@ -443,3 +443,12 @@ Signature: `Codex — 2026-04-17`
 ## §11 Notes back
 
 `Plan has an internal mismatch: both verbatim target blocks are 157 lines, while V1/V5 and acceptance require 180-250.`
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

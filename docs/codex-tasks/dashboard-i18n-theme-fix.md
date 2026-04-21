@@ -335,3 +335,12 @@ CSS через CSS custom properties + `[data-theme="dark"]` selector.
 7. **Пройти ВЕСЬ JSX**: если нашёл hardcoded string не покрытый translations — добавить ключ.
 8. **Theme toggle = segmented control** (три кнопки в одном контейнере), не dropdown и не cycle.
 9. **matchMedia listener**: cleanup в useEffect return. Не забыть removeEventListener.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

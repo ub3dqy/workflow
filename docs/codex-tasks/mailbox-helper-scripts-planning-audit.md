@@ -66,3 +66,12 @@
 | B2 | server.js lines | `wc -l dashboard/server.js` | 499 |
 | B3 | scripts/ contents | `ls scripts/` | mailbox-status.mjs only |
 | B4 | Root package.json | `cat package.json` | not found |
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

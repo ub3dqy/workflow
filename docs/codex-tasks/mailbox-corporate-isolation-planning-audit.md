@@ -230,3 +230,12 @@ All R5 findings applied inline. Pending only:
 - [x] Audit score ≥9/10 — 9.5/10 reached в R6
 - [ ] Codex R3 adversarial final-approval OR go-execute signal
 - [ ] Delivery letter composed
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

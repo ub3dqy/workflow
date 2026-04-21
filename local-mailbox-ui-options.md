@@ -1,40 +1,40 @@
-# Идея UI для локального mailbox workflow
+# Идея UI для mailbox workflow
 
-Да, это хороший вариант, но я бы делал это не как "новую систему", а как **локальный веб-интерфейс поверх уже принятого file-based protocol**.
+UI допустим только как локальный слой над уже существующим mailbox protocol.
 
-Это лучше всего стыкуется с текущим документом `local-claude-codex-mailbox-workflow.md`: source of truth остаются markdown-файлы mailbox, а веб-страница просто даёт удобный слой просмотра и действий. И это не должно ломать роль пользователя как моста и decision-maker из `workflow-role-distribution.md`.
+Ключевой принцип:
 
-## Что я бы рекомендовал
+> **files are the protocol; the dashboard is only a view/controller**
 
-- **Лучший вариант**: локальный web UI с карточками "как в GitHub", но только как UI над `agent-mailbox/`.
-- На карточке: `from`, `to`, `thread`, `status`, `created`, `reply_to`, ссылки на related files, badge `needs user decision` или `formal handoff required`.
-- Колонки: `To Claude`, `To Codex`, `Archive`, плюс thread view справа.
-- Действия: `reply`, `archive`, `open related file`, но эти действия должны писать **те же markdown-файлы**, а не отдельную БД.
+## Что должно оставаться истинным
 
-## Чего бы я не делал
+- Claude↔Codex coordination остаётся mailbox-only
+- source of truth остаются mailbox files и tracked artifacts
+- UI не становится вторым workflow contract
+- UI не превращает пользователя в postman, но и не забирает у него роль decision gate
 
-- не делал бы отдельный backend с собственной state model;
-- не делал бы "live chat" между агентами;
-- не добавлял бы автозапуск агентов из UI;
-- не превращал бы UI в обход `Discrepancy -> stop -> wait`.
+## Что я рекомендую
 
-## Нормальный rollout
+- локальный web UI поверх `agent-mailbox/`
+- карточки с `from`, `to`, `thread`, `status`, `created`, `reply_to`, `project`
+- ссылки на tracked files из `docs/codex-tasks/`
+- явные badges вроде `needs codex review`, `awaiting claude update`, `awaiting user decision`
 
-1. **Read-only dashboard**: рендерит карточки из папок mailbox.
-2. **Safe actions**: reply/archive через ту же файловую схему.
-3. **Helper layer**: validator, atomic `seq`, recovery, cached index.
-4. Только потом думать о polish.
+## Чего UI делать не должен
 
-## Другие варианты и trade-offs
+- хранить отдельную primary state model
+- подменять mailbox write/read semantics
+- запускать агентов автоматически
+- делать live chat между агентами
+- позволять скрыто переписывать scope, whitelist или design decisions
 
-- **TUI**: надёжно, но хуже обзорность и thread navigation.
-- **Просто файлы + Markdown preview**: минимально, но friction остаётся.
-- **SQLite/app-first UI**: удобнее в будущем, но слишком рано и создаёт риск рассинхрона с файлами.
+## Нормальный Rollout
 
-## Итог
+1. Read-only dashboard
+2. Safe actions over the same file protocol
+3. Helper layer for validation/recovery/indexing
+4. Потом polish
 
-**GH-like локальная веб-страница с карточками — это, по-моему, лучший следующий UX-слой**, если сохранить принцип:
+## Вывод
 
-**files are the protocol, web UI is the view/controller**.
-
-Если нужно, следующим шагом можно набросать конкретный UI spec: экраны, карточки, поля, действия и минимальный backend contract.
+Лучший следующий UX-слой — GH-like локальная веб-страница, но только если она остаётся thin layer над текущим mailbox contract.

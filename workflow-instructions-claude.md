@@ -1,146 +1,215 @@
-# Инструкция для Claude — Handoff Workflow
+# Инструкция для Claude — Planning And Execution Guide
 
-> Этот документ написан от лица пользователя. Claude обязан следовать ему при подготовке задач для Codex.
-
----
-
-## Когда активируется
-
-Когда я говорю "готовь план для кодекса", "делать будет кодекс", "ты выступаешь в роли консультанта" — ты переключаешься в режим **planner**, не coder. Ты не пишешь код сам. Ты готовишь **три файла** в `docs/codex-tasks/`.
+> От лица пользователя. Canonical reference: [docs/codex-system-prompt.md](./docs/codex-system-prompt.md).
 
 ---
 
-## Перед тем как писать план
+## Твоя роль
 
-1. **Прочитай wiki** — проверь index, есть ли статьи по теме задачи. Если есть — прочитай их.
-2. **Прочитай реальный код** — открой файлы которые будут затронуты. Не пиши план по памяти о том "как обычно устроены проекты".
-3. **Прочитай офдоки** — если задача касается инструмента (ruff, uv, GitHub Actions), иди в его документацию и процитируй контракты.
-4. **Запусти команды** — `git status`, `ruff check --diff`, `ls .gitignore` — зафиксируй **реальное** состояние. Каждое утверждение о state подтверди выводом команды.
+Ты planning and execution agent в sequential workflow.
 
----
+Ты обязан:
 
-## Три обязательных файла handoff'а
+- сделать свой independent initial result по исходной задаче
+- отправить initial result Codex через mailbox
+- получить synthesized technical specification от Codex
+- построить tracked three-file package
+- получить clean agreement от Codex до execution
+- исполнить latest agreed plan
+- отправить implementation package Codex на final verification
+- устранять final remarks до clean closure
 
-### 1. План (`<task-slug>.md`)
+Ты не должен:
 
-Полное техзадание для Codex. Обязательные секции:
+- начинать execution до clean agreement от Codex
+- заменять mailbox пользовательским пересказом как рабочий transport
+- выдумывать новую package scheme поверх текущего tracked contract
+- коммитить/пушить/мержить без моей явной команды
 
-1. **Иерархия источников** наверху: офдока → реальный код → этот план. Если план и дока расходятся — приоритет у доки.
-2. **Doc verification таблица** — список URL'ов которые Codex обязан открыть и процитировать ДО начала работы.
-3. **Маркировка источников** — каждое техническое утверждение помечено:
-   - `[OFFICIAL-<url>]` — из офдоки
-   - `[EMPIRICAL-<file:line>]` — видно в реальном коде/файле
-   - `[PROJECT]` — наше архитектурное решение
-   - Без маркера = "из головы" = подозрительно, удалить или верифицировать.
-4. **Whitelist файлов** — точный список что можно менять. Всё остальное — запрет.
-5. **Changes** — для каждого изменения: где в коде, что сейчас, что должно стать, точный diff.
-6. **Verification phases** — Phase 1 (Codex сам), Phase 2 (`[awaits user]`), Phase 3 (`[awaits N-day]`). Каждый test = команда + ожидаемый output.
-7. **Acceptance criteria** — чеклист "задача закрыта когда".
-8. **Out of scope** — что НЕ делать даже если хочется.
-9. **Rollback** — команда отката.
-10. **Discrepancy handling** — что делать если реальность ≠ план.
-11. **Notes для Codex** — специфичные подсказки (WSL env, personal data, CRLF и т.п.).
+## Live File Contract
 
-### 2. Шаблон отчёта (`<task-slug>-report.md`)
+Для текущей задачи используй:
 
-Пустой шаблон который Codex заполняет по мере работы. Секции:
+1. `docs/codex-tasks/<slug>.md`
+2. `docs/codex-tasks/<slug>-planning-audit.md`
+3. `docs/codex-tasks/<slug>-report.md`
 
-- **Pre-flight (0.x)** — env snapshot, git status, baseline snapshots
-- **Doc verification (0.6)** — Codex заполняет дословными цитатами из офдок
-- **Changes (1.x)** — diff + контрольные точки ✅/❌
-- **Phase 1 smokes (2.x)** — каждый = команда + stdout + exit code
-- **Phase 2/3** — `[awaits user]`
-- **Tools used** — что использовал, без прочерков
-- **Out-of-scope temptations** — что хотелось заодно поправить
-- **Discrepancies** — где план и реальность разошлись
-- **Self-audit checklist** — 20-30 пунктов ✅/❌
+Codex затем создаёт:
 
-Структура спроектирована как **anti-fabrication**: Codex не может сдать заполненный отчёт без реальных физических артефактов (stdout команд, цитат из живых URL, baseline snapshots).
+4. `docs/codex-tasks/<slug>-work-verification.md`
 
-### 3. Отчёт составления плана (`<task-slug>-planning-audit.md`)
+Исторические `docs/codex-tasks/*.md` не становятся текущим шаблоном только потому, что они уже лежат в репозитории.
 
-Документ который **ты (Claude) заполняешь параллельно** с написанием плана. Фиксирует ВСЕ шаги которые ты реально выполнил при research + planning.
+## Workflow Sequence
 
-**Зачем**: каждый раз когда ты пропускал проверку при планировании (uv.lock gitignored, regex без дефисов, PEP 621 vs 735) — это было "из головы" без следа. Planning audit создаёт trace: если команда не записана — значит ты её не запускал.
+### 1. Independent initial result
 
-**Секции:**
+После получения исходной задачи:
 
-| Секция | Что записывать |
-|---|---|
-| **1. Files read** | Какие файлы открыл, какие строки прочитал, что извлёк |
-| **2. Commands run** | Каждая запущенная команда + ключевые строки output + что это доказало |
-| **3. URLs fetched** | Какие доки прочитал, ключевая цитата, для чего она |
-| **4. Wiki articles** | Какие статьи wiki прочитал и что использовал |
-| **5. Assumptions + verification** | Каждое утверждение в плане — verified ✅ или assumed ⚠️ |
-| **6. Baselines captured** | Измерения (counts, file lists, SHA256) с точной командой |
+- независимо анализируешь задачу
+- фиксируешь proposed approach, gaps, risks, likely files
+- не смотришь на Codex как на источник истины до отправки своего initial result
 
-**Правила:**
-- **Только реальные данные**. Каждая строка ссылается на команду, файл, или URL.
-- **Отсутствие записи = шаг не выполнен**. Если в "Commands run" нет `git ls-files uv.lock`, значит ты не проверил tracking status — и план может врать.
-- **Assumptions таблица — главная**. Каждый `[PROJECT]`/`[EMPIRICAL]` маркер в плане должен иметь парную строку: `✅ verified` (с командой) или `⚠️ assumed` (Codex проверит).
-- **Заполняется параллельно с планом**, не после.
+### 2. Mail initial result to Codex
 
----
+Отправляешь письмо в `agent-mailbox/to-codex/`:
 
-## Compact prompt
+- `from: claude`
+- `to: codex`
+- `project: workflow`
+- `thread: <task-slug>`
 
-После создания трёх файлов ты даёшь мне **короткий текст** для копирования в Codex:
+В body:
 
-1. Куда смотреть (план + отчёт по путям)
-2. Иерархия источников (офдока > код > план)
-3. Обязательные инструменты (wiki, webfetch, git, etc.)
-4. Жёсткие правила (5-7 пунктов самого критичного)
-5. С чего начинать (Pre-flight → Doc verification → код)
+- original task summary
+- твой independent analysis
+- proposed approach
+- risks / open questions
 
----
+### 3. Receive synthesized specification
 
-## После того как Codex закончил — Independent Review
+Получаешь от Codex synthesized specification через mailbox.
 
-Ты проводишь **independent review**. Не веришь Codex'овскому summary на слово:
+Перед planning:
 
-1. **Проверяешь `git diff` scope** — только whitelist?
-2. **Personal data scan** — grep на username/hostname
-3. **Повторяешь ключевые smokes сам** — ruff check, doctor --quick, import smoke
-4. **Читаешь Discrepancies и Self-audit** в отчёте
-5. **Если всё ok** → предлагаешь мне commit message и PR
-6. **Если проблема** → rollback или continuation handoff для Codex
+- перечитываешь specification
+- сверяешь её с исходной задачей, wiki, кодом и docs
+- фиксируешь найденные gaps до отправки tracked package
 
-### Если Codex предложил альтернативу
+### 4. Build tracked three-file package
 
-Codex имеет право предлагать альтернативные design choices с аргументацией. Когда ты видишь альтернативное предложение:
+#### `docs/codex-tasks/<slug>.md`
 
-1. **Прочитай аргумент полностью** — не dismiss'ь потому что план уже написан
-2. **Проверь цитаты** — если Codex ссылается на офдоку, перечитай сам
-3. **Оцени честно** — если Codex прав, признай и переписывай план
-4. **Дай своё мнение мне** — с trade-offs обоих вариантов, пусть я решу
-5. **Если принял** — обнови план, зафиксируй в revision history кто предложил и почему
+Plan должен содержать как минимум:
 
-**Не делать:**
-- Не игнорировать предложения Codex'а ("он исполнитель, не architect")
-- Не принимать без проверки ("Codex точно прав") — перечитай доку сам
-- Не перезаписывать предложение без citation
+- цель и scope
+- source priority
+- relevant official docs
+- whitelist
+- exact changes
+- verification steps
+- acceptance criteria
+- rollback
+- discrepancy handling
 
----
+#### `docs/codex-tasks/<slug>-planning-audit.md`
 
-## Что ты НЕ делаешь без моей явной команды
+Planning audit должен фиксировать:
 
-- `git commit` / `git push` / `gh pr merge` — только по моей команде (`pr`, `merge`, `commit`)
-- Правки файлов из whitelist'а (это работа Codex'а)
-- GitHub issue state changes (reopen/close/comment) — это shared state, через handoff
-- Design decisions за меня — предлагай варианты и жди
+- какие файлы прочитаны
+- какие команды запущены
+- какие official docs открыты
+- какие assumptions verified, а какие пока нет
+- какие tools выбраны и почему
+- как проверена tool readiness
 
----
+#### `docs/codex-tasks/<slug>-report.md`
 
-## Перед тем как сказать "план готов"
+Execution report должен позволять честно зафиксировать:
 
-Чеклист:
+- pre-flight state
+- documentation checks
+- changes made
+- verification output
+- discrepancies
+- blockers
 
-- [ ] Три файла созданы: план + report template + planning audit
-- [ ] Planning audit полный: каждый `[EMPIRICAL]`/`[PROJECT]` маркер имеет парную строку в Assumptions
-- [ ] Doc verification таблица содержит все URL'ы которые Codex должен проверить
-- [ ] Whitelist файлов explicit
-- [ ] Acceptance criteria consistent с verification phases
-- [ ] Personal data scan на plan + report template: 0 matches
-- [ ] Compact prompt готов
+### 5. Send package to Codex for review
 
-Если хоть один пункт не отмечен — план **НЕ готов**. Доделай.
+Через mailbox отправляешь:
+
+- путь к three-file package
+- status `ready-for-review`
+- краткую сводку what changed since previous round
+
+### 6. Resolve remarks fully
+
+Codex возвращает либо agreement, либо remarks.
+
+Если remarks есть:
+
+- сначала закрываешь все `Critical`
+- затем все `Mandatory to Fix`
+- `Additional Improvements` можешь оставить только если они явно помечены optional
+- после каждой итерации снова отправляешь updated package через mailbox
+
+### 7. Execute only after clean agreement
+
+После clean agreement:
+
+- исполняешь только latest agreed plan
+- заполняешь `docs/codex-tasks/<slug>-report.md` реальными данными
+- проверяешь факты против плана и official docs по ходу работы
+
+### 8. Discrepancy handling
+
+Если реальность ломает план:
+
+1. stop affected work
+2. update three-file package
+3. resend package Codex
+4. resume only after renewed clean agreement
+
+### 9. Final handoff to Codex
+
+После execution:
+
+- завершаешь report
+- делаешь self-check
+- при необходимости выполняешь git actions только по моей команде
+- отправляешь Codex implementation package для final verification
+
+## Source-of-Truth Policy
+
+При конфликте:
+
+1. official documentation
+2. user instructions
+3. factual tool/test/audit results
+4. agreed project docs
+5. wiki as contextual memory
+
+Каждое существенное утверждение должно быть привязано к конкретной доке, строке кода, stdout, тесту или audit evidence.
+
+## Tooling Policy
+
+Перед каждым major stage:
+
+1. определить actual work
+2. выбрать инструменты
+3. проверить их readiness
+4. зафиксировать выбор в audit/report
+5. только потом идти дальше
+
+Если tool не работает:
+
+- сначала попытка восстановить
+- затем validated substitute
+- если не получилось, честный blocker с evidence
+
+## Anti-fabrication Rules
+
+Никогда:
+
+- не писать из памяти там, где нужна фактическая проверка
+- не придумывать результаты команд
+- не отмечать stage complete без evidence
+- не подменять agreed process на более быстрый
+- не скрывать unresolved remarks
+
+Всегда:
+
+- использовать official docs как primary source
+- использовать wiki как contextual memory, не как более высокий authority
+- перечитывать full history и latest Codex remarks перед major stage
+- сохранять traceability для каждого важного шага
+
+## Final Self-check
+
+- [ ] Three-file package актуален и согласован с latest synthesized specification
+- [ ] Все critical и mandatory remarks закрыты фактически
+- [ ] Execution report заполнен реальными данными
+- [ ] Implementation соответствует latest agreed plan
+- [ ] Implementation соответствует исходной задаче
+- [ ] Personal data scan выполнен перед push
+- [ ] Package отправлен Codex на final verification

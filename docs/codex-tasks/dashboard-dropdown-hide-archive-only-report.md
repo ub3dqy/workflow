@@ -355,3 +355,12 @@ archive endpoint messages count: 3
 
 - Baseline dashboard probe required a temporary local `node server.js` start because `3003` was not already listening.
 - `V9` and `V10` both produced empty stdout as expected for zero matches; grep exits were non-zero but semantically correct for “nothing found”.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

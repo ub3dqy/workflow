@@ -165,3 +165,12 @@ Signature: `Codex`
 ## §11 Notes back
 
 `V7/V8 skipped per plan because python3 exists but Playwright module is missing in current Codex WSL env. User visual confirmation remains Phase 2 authority. Also recorded unexpected concurrent modification of docs/assets/dashboard-overview.png; file was not touched by this handoff and was left as-is.`
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

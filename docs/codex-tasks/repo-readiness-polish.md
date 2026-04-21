@@ -543,3 +543,12 @@ git reset HEAD start-workflow.cmd start-workflow-hidden.vbs stop-workflow.cmd
   Ship "готовый продукт" state — no functional code changes.
   ```
 - Single commit for logical unity ("repo readiness polish").
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

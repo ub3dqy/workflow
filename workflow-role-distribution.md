@@ -1,176 +1,126 @@
 # Распределение ролей: Claude + Codex + Пользователь
 
 > Этот документ написан от лица пользователя. Оба агента обязаны следовать ему.
+> Canonical reference: [docs/codex-system-prompt.md](./docs/codex-system-prompt.md).
 
 ---
 
 ## Общий принцип
 
-Я работаю с двумя ассистентами одновременно. Каждый делает то, что у него получается лучше. Вместе вы дополняете друг друга и проверяете друг друга.
+Это sequential two-agent workflow.
 
-**Claude** — думает, планирует, ревьюирует.
-**Codex** — выполняет, проверяет план на практике, предлагает альтернативы.
-**Я** — принимаю решения, даю go/no-go, коммичу и мержу.
+- Я даю одну и ту же исходную задачу обоим агентам.
+- Claude и Codex независимо производят initial result.
+- Codex синтезирует техническое задание и выступает gate на review + verification.
+- Claude строит и исполняет tracked package.
+- Claude↔Codex координируются через agent mail, не через пользовательский пересказ.
+- Задача закрыта только когда у Codex нет unresolved `Critical` или `Mandatory to Fix` remarks.
 
-Никто из вас не делает работу другого. Никто из вас не принимает решения за меня.
+## Текущий артефактный контракт
 
----
+### Claude tracked package
+
+Для live задачи Claude ведёт:
+
+1. `docs/codex-tasks/<slug>.md`
+2. `docs/codex-tasks/<slug>-planning-audit.md`
+3. `docs/codex-tasks/<slug>-report.md`
+
+### Codex tracked verification artifact
+
+Codex создаёт и поддерживает:
+
+4. `docs/codex-tasks/<slug>-work-verification.md`
+
+### Mailbox artifacts
+
+Через `agent-mailbox/` идут:
+
+- independent initial results
+- synthesized technical specification
+- review remarks / agreements
+- implementation handoff notices
+- final verification verdicts
+
+## Sequential Workflow
+
+| # | Кто | Что делает |
+|---|---|---|
+| 1 | Я | Даю одну и ту же исходную задачу Claude и Codex |
+| 2 | Claude | Делает свой independent initial result и отправляет его Codex через mailbox |
+| 3 | Codex | Делает свой independent initial result, сравнивает оба результата и синтезирует техническое задание |
+| 4 | Codex | Отправляет synthesized specification Claude через mailbox |
+| 5 | Claude | На основе specification создаёт tracked three-file package |
+| 6 | Claude | Отправляет package Codex на review через mailbox |
+| 7 | Codex | Либо даёт full agreement, либо remarks по категориям `Critical`, `Mandatory to Fix`, `Additional Improvements` |
+| 8 | Claude | Полностью устраняет critical и mandatory remarks и повторно отправляет package |
+| 9 | Claude | После clean agreement исполняет plan и заполняет execution report |
+| 10 | Claude | Отправляет implementation package Codex на final verification |
+| 11 | Codex | Проверяет реализацию, обновляет Work Verification Report и возвращает verdict |
+| 12 | Claude | Устраняет финальные remarks и повторно отправляет package, пока Codex не подтвердит clean status |
 
 ## Что делает Claude
 
-| Действие | Примеры |
+| Действие | Детали |
 |---|---|
-| **Research** | Читает wiki, офдоки, код. Запускает preflight команды для замера baseline. |
-| **Планирование** | Пишет handoff plan + report template + planning audit. Фиксирует whitelist, acceptance criteria, verification phases. |
-| **Architectural decisions** | Предлагает design (не навязывает). Если есть варианты — описывает trade-offs и ждёт моего выбора. |
-| **Independent review** | После Codex — проверяет diff scope, personal data, повторяет smokes. Не верит Codex'овскому summary на слово. |
-| **PR workflow** | Создаёт branch, commit, push, `gh pr create` — только по моей явной команде (`pr`, `merge`). |
-| **Memory management** | Ведёт память: failure rules, positive patterns, project context. Обновляет по ходу. |
-| **Обработка предложений Codex** | Если Codex предложил альтернативу — Claude проверяет доку сам, оценивает честно, даёт мне своё мнение с trade-offs. |
+| **Independent initial result** | Независимый анализ исходной задачи без опоры на Codex |
+| **Planning package** | Три tracked файла: plan, planning-audit, execution report |
+| **Execution** | Реальные изменения по latest agreed plan |
+| **Discrepancy handling** | Если факты ломают plan: stop → update package → resend Codex |
+| **Git actions** | Commit/push/merge только по моей явной команде |
+| **Final handoff to Codex** | Передача implementation package на final verification |
 
 **Claude НЕ делает:**
-- Не пишет production code (даже "по чуть-чуть", даже "для примера")
-- Не правит файлы из whitelist'а Codex'а (кроме content hygiene — sanitization personal data)
-- Не выполняет `git commit/push/merge` без моей явной команды
-- Не делает GitHub issue state changes (reopen/close/comment) — это shared state, через handoff
-- Не принимает решения за меня — предлагает варианты и ждёт
-- Не игнорирует предложения Codex'а ("он исполнитель, не architect")
 
----
+- не начинает execution до clean agreement от Codex
+- не подменяет mailbox пользовательским relay как рабочий transport
+- не выдумывает package format поверх текущего tracked contract
+- не коммитит/пушит/мержит без моего прямого разрешения
+- не скрывает blockers за vague language
 
 ## Что делает Codex
 
-| Действие | Примеры |
+| Действие | Детали |
 |---|---|
-| **Execution** | Читает план от Claude, выполняет Changes по whitelist'у, запускает автофикс, правит файлы. |
-| **Doc verification** | Перед кодом — открывает URL'ы из плана, цитирует дословно, проверяет что план не врёт. |
-| **Verification** | Прогоняет Phase 1 smokes из плана, записывает полный stdout каждой команды. |
-| **Discrepancy reporting** | Если реальность ≠ план — останавливается, записывает расхождение, не продолжает вслепую. |
-| **Report filling** | Заполняет report template параллельно с работой. Каждая секция = реальные данные. |
-| **Design feedback** | Предлагает альтернативный стек/design **с обязательной аргументацией** (цитата из доки, local test, known issue). Не молча меняет план, а фиксирует предложение и ждёт decision. |
+| **Independent initial result** | Собственный анализ исходной задачи |
+| **TZ synthesis** | Сравнивает свой и Claude result, формирует unified technical specification |
+| **Planning review** | Проверяет package на correctness, completeness, traceability, realism, tool readiness |
+| **Remarks classification** | Использует категории `Critical`, `Mandatory to Fix`, `Additional Improvements` |
+| **Final verification** | Проверяет implementation against latest agreed plan + original task |
+| **Work Verification Report** | Ведёт tracked verification document с фактическими проверками и unresolved issues |
 
 **Codex НЕ делает:**
-- Не коммитит и не пушит (финал = заполненный отчёт на диске)
-- Не правит файлы вне whitelist'а плана
-- Не "оптимизирует по дороге" — scope жёсткий
-- Не принимает design decisions единолично (предлагает с аргументами → ждёт)
-- Не придумывает данные в отчёте (stdout только реальный, не "должно быть")
-- Не меняет план молча (правки вне плана только через Discrepancy)
 
----
+- не исполняет production changes вместо Claude
+- не коммитит и не пушит
+- не даёт approval без evidence
+- не блокирует cosmetic issues как critical
+- не меняет scope единолично; сильная альтернатива оформляется как reasoned remark/proposal
 
-## Что делаю я (пользователь)
+## Что делаю я
 
 | Действие | Примеры |
 |---|---|
-| **Задачу ставлю** | "готовь план для кодекса", "pr4", "merge" |
-| **Решения принимаю** | Выбираю между вариантами (Option A/B/C), утверждаю design decisions |
-| **Go/no-go даю** | Claude не коммитит без моего `pr`/`merge`. Codex не продолжает без моего ответа на Discrepancy. |
-| **Передаю между агентами** | Копирую compact prompt из Claude в Codex. Передаю Codex'овский результат Claude'у для review. |
-| **Мержу** | Финальный merge — моё решение (через GitHub UI или по команде Claude'у `merge`) |
+| **Ставлю исходную задачу** | Один и тот же task statement обоим агентам |
+| **Принимаю решения** | Выбираю варианты и design direction |
+| **Даю go/no-go на git** | `commit`, `pr`, `merge`, destructive variants |
+| **Проверяю итог** | Могу читать tracked artifacts и mailbox history |
 
----
+## Priority Order
 
-## Как вы проверяете друг друга
+1. Official documentation
+2. User's explicit instructions
+3. Factual tool/test/audit results
+4. Agreed project documents
+5. Wiki as contextual memory
 
-Двойная верификация. Каждый ловит ошибки другого.
+## Communication Rules
 
-### Claude проверяет Codex
+- Claude↔Codex: mailbox only
+- User↔agents: normal chat in each runtime
+- Mailbox letters can reference tracked files by path
+- Mailbox cannot silently rewrite scope, whitelist, or design decisions
 
-- Independent review после execution (diff scope, personal data, smoke re-run)
-- Не принимает summary на веру — перепроверяет ключевые claims
-- **Ловит**: scope creep, untested assumptions, personal data leaks, regression, fabricated output
+## Historical Archive Rule
 
-### Codex проверяет Claude
-
-- Doc verification до начала работы — если план неправильно описывает API/tool, Codex видит в живых доках
-- Discrepancy reporting — если план содержит ложные baseline'ы, Codex ловит на pre-flight
-- Предлагает лучший design/стек когда видит что plan option неоптимален — **с аргументацией из офдоки или local test'а**
-- **Ловит**: "из головы" утверждения, wrong API semantics, неверные file lists, broken acceptance, suboptimal tool choice, deprecated approaches
-
-### Примеры когда двойная проверка реально сработала
-
-| Кто поймал | Что поймал | Как |
-|---|---|---|
-| Codex | Claude написал `optional-dependencies` вместо `dependency-groups` (PEP 735) | Doc verification pre-flight |
-| Codex | Claude зафиксировал "8 файлов" когда реально 12 (regex missed dashes) | Baseline check |
-| Codex | Claude написал `--select I` acceptance "diff пустой" в грязном worktree | Pre-flight discrepancy |
-| Claude | Codex'овский `ruff --fix` создал 3 новых E402 violation'а | Independent review + `ruff check` |
-| Claude | Codex'овский `uv sync --no-dev` + `uv run` реверсировал no-dev | Smoke re-run |
-| Claude | Codex'овский отчёт содержал реальный hostname в captured output | Personal data scan |
-| Codex | CI gate важнее pre-commit (план предлагал наоборот) | Argumentative design feedback |
-| Codex | I → UP → B поэтапно лучше чем все сразу | Argumentative design feedback |
-
-Без двойной проверки каждая из этих ошибок попала бы в master.
-
----
-
-## Boundaries: что НИКТО не делает без моего go
-
-| Действие | Кто может | Как запросить |
-|---|---|---|
-| `git commit` | Claude по моей команде | Я говорю `pr` или `commit` |
-| `git push` | Claude по моей команде | Автоматически после `pr` |
-| `gh pr merge` | Claude по моей команде | Я говорю `merge` |
-| Force push | Claude по моей **явной** команде | Я выбираю variant с force push explicitly |
-| GitHub issue changes | Codex через handoff plan | Claude готовит plan, Codex выполняет |
-| Design decision | Никто — только я решаю | Оба предлагают варианты, я выбираю |
-| Destructive actions | Claude после proposal + мой explicit go | Claude предлагает варианты, я говорю букву |
-| Memory updates | Claude в свою memory | Claude решает что сохранять |
-| Wiki writes | Claude через `/wiki-save` | По моей команде или инициативе Claude |
-
----
-
-## Коммуникация между агентами
-
-У вас **нет** прямого канала. Вы общаетесь через файлы, а я — мост:
-
-| Направление | Канал | Формат |
-|---|---|---|
-| Claude → Codex | `docs/codex-tasks/` plan + report template + compact prompt через меня | Structured handoff files |
-| Codex → Claude | Заполненный report + Discrepancy files + design reviews | Через меня ("Codex закончил, вот отчёт") |
-| Оба → мне | Текст в чате + файлы на диске | Summary + рекомендация |
-| Я → обоим | Мои сообщения в каждом чате | Команды и решения |
-
----
-
-## Когда роли переключаются
-
-| Мой сигнал | Что происходит |
-|---|---|
-| "готовь план для кодекса" | Claude → planner. Пишет три файла. Не кодит. |
-| "сделай сам" / "поправь" / "напиши" | Claude → coder. Codex не задействован. |
-| "что думаешь?" / "какие варианты?" | Claude → advisor. Trade-offs, ждёт мой выбор. |
-| "review" | Claude → reviewer. Проверяет Codex'а independent'но. |
-| "pr" / "commit" / "merge" | Claude → executor. Git/gh операция. |
-| *(compact prompt в Codex)* | Codex → execution. Читает план, заполняет отчёт. |
-
----
-
-## Цепочка handoff — полный цикл
-
-```
-1. Я ставлю задачу Claude'у
-2. Claude research → пишет plan + report template + planning audit
-3. Claude даёт мне compact prompt
-4. Я копирую prompt в Codex
-5. Codex выполняет plan, заполняет report
-6. Codex говорит "готово" (мне)
-7. Я говорю Claude'у "review"
-8. Claude independent review → вердикт (accepted / rollback / continuation)
-9. Если accepted → Claude предлагает commit message
-10. Я говорю "pr" → Claude: branch → commit → push → gh pr create
-11. CI checks (automated)
-12. Я говорю "merge" → Claude: gh pr merge
-13. Claude sync'ает master, предлагает next step
-```
-
-Каждый шаг оставляет trace в `docs/codex-tasks/`. Через неделю можно открыть любой PR и понять: что планировалось, что реально произошло, где были отклонения.
-
----
-
-## Одно золотое правило
-
-> **Ни один из вас не заменяет другого. Claude не кодит "за Codex". Codex не планирует "за Claude". Я не делаю работу ни одного из вас — я принимаю решения и контролирую процесс.**
-
-Если это правило кажется избыточным для "маленькой" задачи — именно в маленьких задачах его нарушают чаще всего.
+Most existing `docs/codex-tasks/*.md` were created under earlier workflow revisions. They remain archived evidence, not the live operating template.

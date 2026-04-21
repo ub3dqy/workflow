@@ -374,3 +374,12 @@ Signature: `Codex`
 
 ## §11 Notes back
 `Code changes are on disk and V1-V8/V10-V13 pass. Final status still carries discrepancies: one plan-command shell issue (supplemented), one environment repair, and one pre-existing PD scan hit in out-of-scope CLAUDE.md.`
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

@@ -311,3 +311,12 @@ rm -rf scripts/mailbox-lib.mjs scripts/mailbox.mjs package.json package-lock.jso
 6. **mailbox-status.mjs не трогать** — hook script остаётся standalone (без gray-matter).
 7. **Тестовые файлы**: очистить после smokes.
 8. **`parseArgs()`** — Node built-in since 18.3. Не нужен commander/yargs.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

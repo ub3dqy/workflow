@@ -246,3 +246,12 @@ Persistence: `localStorage.getItem("mailbox-project")`.
 4. **Dynamic project list**: dashboard собирает unique projects из сообщений. Не hardcode.
 5. **mailbox-status.mjs standalone**: по-прежнему без gray-matter. Добавить `project` extraction через regex.
 6. **i18n**: новые ключи в оба языка (ru + en).
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

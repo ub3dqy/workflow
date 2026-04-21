@@ -753,3 +753,12 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 Split приемлем ТОЛЬКО если user прямо попросит (например: spec update separately).
 
 **Push**: ждёт explicit user command `пуш`. Без него — локальный commit остаётся в working tree.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

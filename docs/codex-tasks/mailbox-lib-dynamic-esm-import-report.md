@@ -568,3 +568,12 @@ If any ❌ → stop delivery, log in §5 Discrepancies, wait for user.
 - Current WSL shell already has Node `v24.14.1`, but `wsl.exe bash -c "node --version"` resolves to `v18.19.1`. That let `V9` run for real instead of being waived.
 - `V12` is not a product leak; it is a verification-command false positive caused by the plan file containing its own grep regex.
 - `scripts/mailbox-lib.mjs` line count after edit is `593`, within the plan's expected `592-593` range.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

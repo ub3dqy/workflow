@@ -300,3 +300,12 @@ This handoff replaces the reverted self-execution of mailbox auto-project + wiki
 - **Related files** (created at Steps 9/11):
   - Plan: `docs/codex-tasks/mailbox-autoproject-wiki-revision.md`
   - Report template: `docs/codex-tasks/mailbox-autoproject-wiki-revision-report.md`
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

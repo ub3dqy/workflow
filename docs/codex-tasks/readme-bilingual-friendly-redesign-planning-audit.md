@@ -166,3 +166,12 @@ Follows `repo-readiness-polish` (commit `e6afbe8`) which shipped baseline README
 - Related:
   - Plan: `docs/codex-tasks/readme-bilingual-friendly-redesign.md`
   - Report: `docs/codex-tasks/readme-bilingual-friendly-redesign-report.md`
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

@@ -96,3 +96,12 @@
 | B1 | File count in project root | `ls -1 E:/Project/workflow/ \| wc -l` | 5 .md files + .codex |
 | B2 | Git repo status | `git rev-parse --is-inside-work-tree` | not a git repo |
 | B3 | Existing dirs | `ls E:/Project/workflow/` | no subdirs except docs/codex-tasks/ (just created) |
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

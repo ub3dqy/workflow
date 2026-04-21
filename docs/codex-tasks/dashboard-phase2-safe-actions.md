@@ -280,3 +280,12 @@ rm -rf agent-mailbox/to-codex/* agent-mailbox/to-claude/* agent-mailbox/archive/
 5. **Тестовые файлы**: после Phase 1 smokes удалить все тестовые сообщения из agent-mailbox/.
 6. **Не трогать hero h1** — он стилизован и может быть специфичным. Обновить только subhead `<p>`.
 7. **CSS**: добавлять новые стили в тот же `styles` const в App.jsx. Не создавать отдельный CSS файл.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

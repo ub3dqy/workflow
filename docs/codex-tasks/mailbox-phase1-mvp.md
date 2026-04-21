@@ -351,3 +351,12 @@ rm -rf dashboard/ agent-mailbox/ CLAUDE.md .gitignore
 6. **gray-matter на frontend**: gray-matter — Node.js пакет, не работает в браузере. Парсинг frontmatter делает **server** (Express), а не client (React). Client получает уже распарсенный JSON.
 7. **Mailbox boundary**: mailbox ≠ task assignment. Если сообщение подразумевает изменение кода — это handoff через `docs/codex-tasks/`, не mailbox. Зафиксировать в CLAUDE.md.
 8. **agent-mailbox/ — gitignored**: директории создаются локально. Они не попадут в git. Для воспроизведения после clone нужен bootstrap (mkdir), можно добавить `npm run setup` script.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.

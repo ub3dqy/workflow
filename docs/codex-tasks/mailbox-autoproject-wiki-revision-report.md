@@ -658,3 +658,12 @@ EXIT=0
 
 - `mailbox-autoproject-wiki-revision-report.md` template still contains stale table command text with escaped pipes; the plan's fenced code blocks were the only safe source of executable commands.
 - V15's `timeout 5 node server.js` expectation is too strict on this machine. Cold start needed ~15 seconds before logging `Server listening on 127.0.0.1:3003`.
+
+
+## Legacy Workflow Note (2026-04-21)
+
+This file is preserved as a historical artifact from an earlier workflow revision.
+
+It may mention legacy patterns such as `Claude planner / Codex executor`, user relay, `compact prompt`, or older handoff shapes.
+
+Do not use it as the live operating template. Current contract: `docs/codex-system-prompt.md`, `AGENTS.md`, `workflow-role-distribution.md`, `workflow-instructions-claude.md`, and `workflow-instructions-codex.md`.
