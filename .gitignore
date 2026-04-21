@@ -14,4 +14,4 @@ dashboard/dist/
 Thumbs.db
 
 # Codex CLI sandbox state (personal, per-session)
-.codex
+.codex/sessions/

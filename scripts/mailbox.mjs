@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   archiveMessageFile,
   collectMailboxMessages,
@@ -14,6 +15,7 @@ import {
   normalizePath,
   readMessageByRelativePath,
   recoverOrphans,
+  resolveCallerProject,
   sanitizeString,
   threadExists,
   validateProjectScope,
@@ -23,6 +25,9 @@ import {
 } from "./mailbox-lib.mjs";
 
 const mailboxRoot = defaultMailboxRoot;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const runtimeRoot = path.resolve(__dirname, "../mailbox-runtime");
 const knownCommands = new Set(["send", "list", "reply", "archive", "recover"]);
 
 function parseCommand(argv) {
@@ -104,9 +109,9 @@ function formatTable(messages) {
 function usageText() {
   return [
     "Usage:",
-    "  node scripts/mailbox.mjs send --from <user|claude|codex> --to <claude|codex> --thread <slug> --project <name> (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
+    "  node scripts/mailbox.mjs send --from <claude|codex> --to <claude|codex> --thread <slug> --project <name> (--body <text> | --file <path>) [--reply-to <id>] [--existing-thread]",
     "  node scripts/mailbox.mjs list [--bucket <to-claude|to-codex|archive|all>] --project <name> [--json]",
-    "  node scripts/mailbox.mjs reply --from <user|claude|codex> --project <name> --to <relativePath> (--body <text> | --file <path>)",
+    "  node scripts/mailbox.mjs reply --from <claude|codex> --project <name> --to <relativePath> (--body <text> | --file <path>)",
     "  node scripts/mailbox.mjs archive --path <relativePath> --project <name> [--resolution <answered|no-reply-needed|superseded>] [--answered-at <UTC ISO> --answer-message-id <id>]",
     "    answered resolution requires --answered-at",
     "  node scripts/mailbox.mjs recover --project <name>"
@@ -132,6 +137,19 @@ async function handleSend(args) {
     throw new ClientError(
       64,
       "--project is required (agent-path isolation); cwd autodetect removed per ТЗ"
+    );
+  }
+  const boundProject = await resolveCallerProject({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  if (!boundProject) {
+    throw new ClientError(64, "send requires bound session for current cwd");
+  }
+  if (boundProject !== project) {
+    throw new ClientError(
+      64,
+      `session bound to "${boundProject}", refusing send for project "${project}"`
     );
   }
   const body = await readBody(options);

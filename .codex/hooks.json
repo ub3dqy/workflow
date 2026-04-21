@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/mnt/e/Project/workflow/scripts/mailbox-session-register.mjs\" --project workflow --agent codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/mnt/e/Project/workflow/scripts/mailbox-session-register.mjs\" --project workflow --agent codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

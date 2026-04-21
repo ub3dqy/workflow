@@ -21,7 +21,7 @@ export const bucketConfig = {
   archive: { key: "archive", recursive: true }
 };
 
-const allowedSenders = new Set(["user", "claude", "codex"]);
+const allowedSenders = new Set(["claude", "codex"]);
 const allowedReplyTargets = new Set(["claude", "codex"]);
 const allowedArchiveResolutions = new Set([
   "answered",
@@ -38,6 +38,90 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const defaultMailboxRoot = path.resolve(__dirname, "../agent-mailbox");
+
+export function toHostPath(rawCwd) {
+  if (typeof rawCwd !== "string") return "";
+  const trimmed = rawCwd.trim();
+  if (!trimmed) return "";
+  if (process.platform !== "win32") {
+    const windowsMatch = trimmed.match(/^([A-Za-z]):[\\/](.*)$/);
+    if (windowsMatch) {
+      const drive = windowsMatch[1].toLowerCase();
+      const remainder = windowsMatch[2].replace(/[\\]+/g, "/");
+      return path.posix.join("/mnt", drive, remainder);
+    }
+    return trimmed;
+  }
+
+  const wslMatch = trimmed.match(/^\/mnt\/([A-Za-z])\/(.*)$/);
+  if (wslMatch) {
+    const drive = wslMatch[1].toUpperCase();
+    const remainder = wslMatch[2].replace(/\//g, "\\");
+    return `${drive}:\\${remainder}`;
+  }
+
+  return trimmed;
+}
+
+export async function resolveCallerProject({ cwd, runtimeRoot }) {
+  const sessionsPath = path.join(runtimeRoot, "sessions.json");
+  let raw;
+
+  try {
+    raw = await fs.readFile(sessionsPath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return "";
+  }
+
+  if (!Array.isArray(list)) {
+    return "";
+  }
+
+  const targetHost = toHostPath(cwd);
+  if (!targetHost) {
+    return "";
+  }
+
+  const targetNormalized = path.normalize(targetHost).replace(/[\\/]+$/, "");
+  const caseFold = (value) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
+  const targetFolded = caseFold(targetNormalized);
+
+  for (const entry of list) {
+    if (!entry?.cwd) {
+      continue;
+    }
+
+    const entryHost = toHostPath(entry.cwd);
+    if (!entryHost) {
+      continue;
+    }
+
+    const entryNormalized = path.normalize(entryHost).replace(/[\\/]+$/, "");
+    const entryFolded = caseFold(entryNormalized);
+
+    if (targetFolded === entryFolded) {
+      return normalizeProject(entry.project) || "";
+    }
+
+    const separator = entryFolded.includes("\\") ? "\\" : "/";
+    if (targetFolded.startsWith(entryFolded + separator)) {
+      return normalizeProject(entry.project) || "";
+    }
+  }
+
+  return "";
+}
 
 export class ClientError extends Error {
   constructor(status, message) {
@@ -181,7 +265,7 @@ export function validateSender(from) {
   const nextSender = sanitizeString(from);
 
   if (!allowedSenders.has(nextSender)) {
-    throw new ClientError(400, 'from must be "user", "claude", or "codex"');
+    throw new ClientError(400, 'from must be "claude" or "codex"');
   }
 
   return nextSender;
@@ -666,16 +750,6 @@ export function getReplyTargetForMessage(message, from) {
   const participants = [message.from, message.to].filter((value, index, values) => {
     return allowedReplyTargets.has(value) && values.indexOf(value) === index;
   });
-
-  if (sender === "user") {
-    const fallback = participants[0];
-
-    if (!fallback) {
-      throw new ClientError(400, "target message has no agent participant");
-    }
-
-    return fallback;
-  }
 
   const nonSender = participants.find((value) => value !== sender);
 

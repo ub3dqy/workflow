@@ -879,3 +879,32 @@ Mailbox не предназначен для больших логов, дамп
 - требования к Phase 3 helper scripts: validator, atomic seq, cached lookup
 
 Следующий логический шаг после этого draft'а — не "добавить ещё философии", а перевести его в формальный execution handoff plan для Phase 1 MVP.
+
+---
+
+## Agent discipline contract
+
+Для agent-side flow действуют жёсткие правила:
+
+- агент использует только `mailbox.mjs ... --project <name>` и `/api/agent/*`;
+- agent-authored sender может быть только `claude` или `codex`;
+- `user` не является допустимым sender для agent CLI flow;
+- user-facing `/api/messages` остаётся multi-project только для human dashboard, не для agent routing;
+- если session binding не найден или project не совпадает, `send` обязан завершаться ошибкой.
+
+Это и есть модель "корпоративной почты":
+
+- user видит все проекты через dashboard;
+- агент видит и трогает только свой проект.
+
+## Codex WSL prerequisite
+
+Codex-side autoregistration в этом repo рассчитана на Linux/WSL flow.
+
+Нужно:
+
+1. trusted project для project-level `.codex/config.toml`;
+2. включённый feature flag `codex_hooks = true`;
+3. запуск Codex из WSL, не из native Windows.
+
+Windows-native Codex остаётся degraded mode: hooks там официально disabled, значит автоматическая session registration не гарантируется.

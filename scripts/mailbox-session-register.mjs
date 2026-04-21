@@ -1,4 +1,4 @@
-import path from "node:path";
+import { normalizeProject, toHostPath } from "./mailbox-lib.mjs";
 
 const SUPERVISOR_ENDPOINT = "http://127.0.0.1:3003/api/runtime/sessions";
 const POST_TIMEOUT_MS = 3000;
@@ -16,33 +16,6 @@ async function readStdin() {
   return chunks.join("").trim();
 }
 
-function toHostPath(rawCwd) {
-  if (typeof rawCwd !== "string") return "";
-  const trimmed = rawCwd.trim();
-  if (!trimmed) return "";
-  if (process.platform !== "win32") {
-    const windowsMatch = trimmed.match(/^([A-Za-z]):[\\/](.*)$/);
-    if (windowsMatch) {
-      const drive = windowsMatch[1].toLowerCase();
-      const remainder = windowsMatch[2].replace(/[\\]+/g, "/");
-      return path.posix.join("/mnt", drive, remainder);
-    }
-    return trimmed;
-  }
-  const wslMatch = trimmed.match(/^\/mnt\/([A-Za-z])\/(.*)$/);
-  if (wslMatch) {
-    const drive = wslMatch[1].toUpperCase();
-    const remainder = wslMatch[2].replace(/\//g, "\\");
-    return `${drive}:\\${remainder}`;
-  }
-  return trimmed;
-}
-
-function normalizeProject(value) {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
 function parseProjectArg(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -54,6 +27,21 @@ function parseProjectArg(argv) {
     }
   }
   return "";
+}
+
+function parseAgentArg(argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--agent" && typeof argv[i + 1] === "string") {
+      const value = argv[i + 1].trim();
+      if (value === "claude" || value === "codex") return value;
+    }
+    if (typeof arg === "string" && arg.startsWith("--agent=")) {
+      const value = arg.slice("--agent=".length).trim();
+      if (value === "claude" || value === "codex") return value;
+    }
+  }
+  return "claude";
 }
 
 function detectPlatform() {
@@ -83,6 +71,7 @@ async function postWithTimeout(url, body, timeoutMs) {
 
 async function main() {
   const project = parseProjectArg(process.argv.slice(2));
+  const agent = parseAgentArg(process.argv.slice(2));
   if (!project) {
     process.exit(0);
   }
@@ -108,10 +97,10 @@ async function main() {
 
   const body = {
     session_id,
-    agent: "claude",
+    agent,
     project,
     cwd,
-    transport: "claude-hooks",
+    transport: agent === "codex" ? "codex-hooks" : "claude-hooks",
     platform: detectPlatform()
   };
 
