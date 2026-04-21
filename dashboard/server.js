@@ -184,21 +184,40 @@ const supervisor = createSupervisor({
 const agentRouter = express.Router();
 
 agentRouter.use((request, response, next) => {
-  const project = normalizeProject(request.query.project || request.body?.project);
+  const sessionId = typeof request.query.session_id === "string"
+    ? request.query.session_id.trim()
+    : "";
+  const project = normalizeProject(
+    request.query.project || request.body?.project
+  );
+  if (!sessionId) {
+    response.status(400).json({ error: "session_id query param is required for /api/agent/*" });
+    return;
+  }
   if (!project) {
     response.status(400).json({ error: "project query/body param is required for /api/agent/*" });
     return;
   }
+  const session = supervisor.state.sessions.get(sessionId);
+  if (!session) {
+    response.status(404).json({ error: "session not found" });
+    return;
+  }
+  if (session.project !== project) {
+    response.status(403).json({ error: "project scope mismatch for session" });
+    return;
+  }
   request.agentProject = project;
+  request.agentSession = session;
   next();
 });
 
 agentRouter.get("/messages", async (request, response) => {
   try {
     const [allToClaude, allToCodex, allArchive] = await Promise.all([
-      readBucket("to-claude", mailboxRoot),
-      readBucket("to-codex", mailboxRoot),
-      readBucket("archive", mailboxRoot)
+      readBucket("to-claude", mailboxRoot, { project: request.agentProject }),
+      readBucket("to-codex", mailboxRoot, { project: request.agentProject }),
+      readBucket("archive", mailboxRoot, { project: request.agentProject })
     ]);
     const toClaude = filterMessagesByProject(allToClaude, request.agentProject);
     const toCodex = filterMessagesByProject(allToCodex, request.agentProject);

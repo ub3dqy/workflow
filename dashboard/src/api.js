@@ -60,11 +60,14 @@ export async function postNote({ relativePath, note }) {
   return parseJsonResponse(response, `Notes API returned ${response.status}`);
 }
 
-export async function fetchAgentMessages({ project, signal } = {}) {
+export async function fetchAgentMessages({ project, session_id, signal } = {}) {
   if (!project) {
     throw new Error("project is required for fetchAgentMessages");
   }
-  const params = new URLSearchParams({ project });
+  if (!session_id) {
+    throw new Error("session_id is required for fetchAgentMessages");
+  }
+  const params = new URLSearchParams({ project, session_id });
   const response = await fetch(`/api/agent/messages?${params.toString()}`, {
     cache: "no-store",
     signal

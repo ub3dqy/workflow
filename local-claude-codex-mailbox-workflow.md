@@ -153,6 +153,56 @@ Project isolation is infrastructure-enforced:
 - dashboard is user-facing and can remain multi-project
 - agents must never use mailbox visibility to invent cross-project priorities
 
+## Agent-path read isolation contract
+
+Enforced in-repo as of read-isolation task (session + filename-prefix storage):
+
+- **CLI**: every agent-path operation (`send / list / reply / archive / recover`) requires a bound session whose project equals the `--project` flag. Session binding is established by the SessionStart hook via `scripts/mailbox-session-register.mjs` → supervisor POST `/api/runtime/sessions`. Read paths (`readBucket`, `collectMailboxMessages`, `readMessageByRelativePath`, `recoverOrphans`) filter by filename prefix **before** any file content is opened.
+- **HTTP**: every `/api/agent/*` call requires `session_id` + `project` query params; server rejects 400 (missing) / 404 (unknown session) / 403 (project scope mismatch). `/api/agent/messages` readBucket calls are project-scoped.
+- **Admin endpoints** (`/api/messages*`, `/api/archive`, `/api/notes`) remain multi-project by design — human admin surface via browser. They are explicitly **NOT part of the agent isolation guarantee**.
+- **Filesystem discipline**: agents MUST NOT read `agent-mailbox/` files directly (`Read`, `Bash cat`, `Grep` on mailbox paths). This is a discipline contract, not a code-level guard. Any agent that bypasses the CLI/API surface violates project isolation.
+
+### Storage invariant
+
+Every message filename starts with `<project>__` (double-underscore separator). Enforced by `generateMessageFile` which prepends the normalized project and by `normalizeProject` which rejects slugs containing `__` with `ClientError(400, 'project slug must not contain "__" (filename-prefix separator)')`.
+
+### Residual risks
+
+- Admin endpoints (accepted non-goal — human scope)
+- Direct filesystem reads by agents (discipline contract, unenforceable in code)
+- Process-memory serial reuse across agent turns in the same Node process (theoretical side-channel; not a realistic attack vector in local-dev trust model)
+- Local host binding (`127.0.0.1`) — dashboard is not network-exposed
+
+## Migration runbook — maintenance window
+
+The filename-prefix storage is established via a one-time migration script (`scripts/mailbox-migrate-project-prefix.mjs`). Because `agent-mailbox/` is gitignored (`.gitignore:1-3`), migration runs as a **runtime operation outside of git**, tracked only via a migration-log under `mailbox-runtime/`.
+
+**Step A — Code changes (Claude, working-tree only, no commit)**
+
+Claude applies all code + docs edits in the working tree. Runs pre-migration V-probes. Updates the execution report. **Claude does NOT commit** — per `CLAUDE.md:85` commit requires explicit user command.
+
+**Step A' — Commit + push (explicit user-commanded branch)**
+
+Triggered only when the user explicitly commands commit / push. Claude runs `git commit` (and `git push` only on additional authorization).
+
+**Step B — Maintenance-window migration (user-executed)**
+
+1. Stop dashboard server and all Claude/Codex Code sessions in the project.
+2. `node scripts/mailbox-migrate-project-prefix.mjs --dry-run` — review planned renames.
+3. `node scripts/mailbox-migrate-project-prefix.mjs --apply` — executes renames, emits `mailbox-runtime/migration-<utc-timestamp>.log` with one `<old-relative-path>\t<new-relative-path>` per line.
+4. Re-apply `--apply` — idempotency check expected 0 renamed.
+5. `find agent-mailbox -name "*.md" -not -name "*__*"` — expected empty.
+6. Restart dashboard (`cd dashboard && npm run dev`).
+7. Open a fresh Claude Code session (SessionStart hook re-registers with the restarted supervisor).
+8. Fresh Claude session runs remaining V-probes and fills execution report §2.
+
+### Rollback
+
+- **Working-tree rollback** (Step A done, no commit): `git restore <files>` or `git checkout -- <files>`.
+- **Code rollback after commit** (Step A'): `git revert <step-A'-sha>` then restart dashboard + fresh sessions. Requires explicit user command per repo policy.
+- **Data rollback** (Step B): `node scripts/mailbox-migrate-project-prefix.mjs --restore mailbox-runtime/migration-<timestamp>.log` reads the log in reverse and renames files back. The migration-log is the sole source of truth for data rollback — **not git**. Log is gitignored but persists locally.
+- **Order when both applied**: roll back data first (while new code still expects prefixes), then code via user-commanded `git revert`.
+
 ## Dashboard Constraints
 
 The dashboard is allowed to:

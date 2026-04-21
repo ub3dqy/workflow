@@ -153,7 +153,7 @@ async function handleSend(args) {
     );
   }
   const body = await readBody(options);
-  const messages = await collectMailboxMessages(mailboxRoot);
+  const messages = await collectMailboxMessages(mailboxRoot, { project });
 
   if (options["existing-thread"] && !threadExists(thread, messages)) {
     throw new ClientError(64, `thread "${thread}" does not exist`);
@@ -192,7 +192,20 @@ async function handleList(args) {
       "--project is required (agent-path list must be scoped to one project)"
     );
   }
-  const messages = await collectMailboxMessages(mailboxRoot);
+  const boundProject = await resolveCallerProject({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  if (!boundProject) {
+    throw new ClientError(64, "list requires bound session for current cwd");
+  }
+  if (boundProject !== project) {
+    throw new ClientError(
+      64,
+      `session bound to "${boundProject}", refusing list for project "${project}"`
+    );
+  }
+  const messages = await collectMailboxMessages(mailboxRoot, { project });
   const filteredByBucket =
     bucket === "all"
       ? messages
@@ -245,13 +258,32 @@ async function handleReply(args) {
       "--project is required (reply must stay within agent session project)"
     );
   }
-  const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot);
+  const boundProject = await resolveCallerProject({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  if (!boundProject) {
+    throw new ClientError(64, "reply requires bound session for current cwd");
+  }
+  if (boundProject !== explicitProject) {
+    throw new ClientError(
+      64,
+      `session bound to "${boundProject}", refusing reply for project "${explicitProject}"`
+    );
+  }
+  const targetMessage = await readMessageByRelativePath(
+    options.to,
+    mailboxRoot,
+    { project: boundProject }
+  );
   validateProjectScope(explicitProject, targetMessage);
   const location = path.resolve(mailboxRoot, targetMessage.relativePath);
   await markMessageReceived(location);
   const body = await readBody(options);
   const to = getReplyTargetForMessage(targetMessage, from);
-  const messages = await collectMailboxMessages(mailboxRoot);
+  const messages = await collectMailboxMessages(mailboxRoot, {
+    project: explicitProject
+  });
   const created = await generateMessageFile({
     from,
     to,
@@ -305,7 +337,24 @@ async function handleArchive(args) {
       "--project is required (archive scoped to single project)"
     );
   }
-  const targetMessage = await readMessageByRelativePath(options.path, mailboxRoot);
+  const boundProject = await resolveCallerProject({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  if (!boundProject) {
+    throw new ClientError(64, "archive requires bound session for current cwd");
+  }
+  if (boundProject !== explicitProject) {
+    throw new ClientError(
+      64,
+      `session bound to "${boundProject}", refusing archive for project "${explicitProject}"`
+    );
+  }
+  const targetMessage = await readMessageByRelativePath(
+    options.path,
+    mailboxRoot,
+    { project: boundProject }
+  );
   validateProjectScope(explicitProject, targetMessage);
   const nextResolution = validateResolution(options.resolution);
   const nextAnsweredAt = sanitizeString(options["answered-at"]);
@@ -344,10 +393,20 @@ async function handleRecover(args) {
       "--project is required (recover scoped to single project)"
     );
   }
-  const allRecovered = await recoverOrphans(mailboxRoot);
-  const recovered = allRecovered.filter((item) => {
-    return item.project === project;
+  const boundProject = await resolveCallerProject({
+    cwd: process.cwd(),
+    runtimeRoot
   });
+  if (!boundProject) {
+    throw new ClientError(64, "recover requires bound session for current cwd");
+  }
+  if (boundProject !== project) {
+    throw new ClientError(
+      64,
+      `session bound to "${boundProject}", refusing recover for project "${project}"`
+    );
+  }
+  const recovered = await recoverOrphans(mailboxRoot, { project });
 
   if (options.json) {
     console.log(JSON.stringify(recovered, null, 2));

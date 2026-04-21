@@ -144,7 +144,22 @@ export function sanitizeString(value) {
 }
 
 export function normalizeProject(project) {
-  return sanitizeString(project);
+  const next = sanitizeString(project);
+  if (next.includes("__")) {
+    throw new ClientError(
+      400,
+      'project slug must not contain "__" (filename-prefix separator)'
+    );
+  }
+  return next;
+}
+
+export function extractFilenameProject(filename) {
+  if (typeof filename !== "string") return "";
+  const base = path.basename(filename);
+  const idx = base.indexOf("__");
+  if (idx <= 0) return "";
+  return base.slice(0, idx);
 }
 
 export function validateProjectScope(currentProject, message) {
@@ -271,7 +286,11 @@ export function validateSender(from) {
   return nextSender;
 }
 
-export function validateRelativeInboxPath(relativePath, mailboxRoot) {
+export function validateRelativeInboxPath(
+  relativePath,
+  mailboxRoot,
+  { project } = {}
+) {
   const trimmed = sanitizeString(relativePath).replace(/\\/g, "/");
 
   if (!trimmed) {
@@ -292,6 +311,17 @@ export function validateRelativeInboxPath(relativePath, mailboxRoot) {
     );
   }
 
+  if (project) {
+    const nextProject = normalizeProject(project);
+    const basename = path.basename(trimmed);
+    if (extractFilenameProject(basename) !== nextProject) {
+      throw new ClientError(
+        400,
+        `relativePath basename does not belong to bound project "${nextProject}"`
+      );
+    }
+  }
+
   const resolvedPath = path.resolve(mailboxRoot, trimmed);
   const mailboxPrefix = `${mailboxRoot}${path.sep}`;
 
@@ -306,7 +336,11 @@ export function validateRelativeInboxPath(relativePath, mailboxRoot) {
   };
 }
 
-export function validateRelativeMessagePath(relativePath, mailboxRoot) {
+export function validateRelativeMessagePath(
+  relativePath,
+  mailboxRoot,
+  { project } = {}
+) {
   const trimmed = sanitizeString(relativePath).replace(/\\/g, "/");
 
   if (!trimmed) {
@@ -326,6 +360,17 @@ export function validateRelativeMessagePath(relativePath, mailboxRoot) {
       400,
       'relativePath must start with "to-claude/", "to-codex/", or "archive/"'
     );
+  }
+
+  if (project) {
+    const nextProject = normalizeProject(project);
+    const basename = path.basename(trimmed);
+    if (extractFilenameProject(basename) !== nextProject) {
+      throw new ClientError(
+        400,
+        `relativePath basename does not belong to bound project "${nextProject}"`
+      );
+    }
   }
 
   const resolvedPath = path.resolve(mailboxRoot, trimmed);
@@ -505,7 +550,7 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
   };
 }
 
-export async function readBucket(bucketName, mailboxRoot) {
+export async function readBucket(bucketName, mailboxRoot, { project } = {}) {
   const config = bucketConfig[bucketName];
 
   if (!config) {
@@ -513,7 +558,13 @@ export async function readBucket(bucketName, mailboxRoot) {
   }
 
   const bucketRoot = path.join(mailboxRoot, bucketName);
-  const files = await collectMarkdownFiles(bucketRoot, config.recursive);
+  let files = await collectMarkdownFiles(bucketRoot, config.recursive);
+  if (project) {
+    const nextProject = normalizeProject(project);
+    files = files.filter(
+      (file) => extractFilenameProject(file) === nextProject
+    );
+  }
   const messages = await Promise.all(
     files.map((filePath) => readMessage(filePath, bucketName, mailboxRoot))
   );
@@ -529,19 +580,25 @@ export async function readBucket(bucketName, mailboxRoot) {
   return messages.map(({ sortValue, ...message }) => message);
 }
 
-export async function collectMailboxMessages(mailboxRoot) {
+export async function collectMailboxMessages(mailboxRoot, { project } = {}) {
   const buckets = await Promise.all(
     knownBuckets.map(async (bucketName) => ({
       bucketName,
-      messages: await readBucket(bucketName, mailboxRoot)
+      messages: await readBucket(bucketName, mailboxRoot, { project })
     }))
   );
 
   return buckets.flatMap((bucket) => bucket.messages);
 }
 
-export async function readMessageByRelativePath(relativePath, mailboxRoot) {
-  const location = validateRelativeInboxPath(relativePath, mailboxRoot);
+export async function readMessageByRelativePath(
+  relativePath,
+  mailboxRoot,
+  { project } = {}
+) {
+  const location = validateRelativeInboxPath(relativePath, mailboxRoot, {
+    project
+  });
   return readMessage(location.absolutePath, location.bucketName, mailboxRoot);
 }
 
@@ -619,6 +676,13 @@ export async function generateMessageFile({
     throw new ClientError(400, "body is required");
   }
 
+  if (!nextProject) {
+    throw new ClientError(
+      400,
+      "project is required to generate message filename"
+    );
+  }
+
   const targetDirName = `to-${nextTarget}`;
   const targetDirPath = path.join(mailboxRoot, targetDirName);
   const created = toUtcTimestamp();
@@ -630,7 +694,7 @@ export async function generateMessageFile({
     messages
   );
   const id = `${filenameTimestamp}-${nextFrom}-${seq}`;
-  const filename = `${filenameTimestamp}-${nextThread}-${nextFrom}-${seq}.md`;
+  const filename = `${nextProject}__${filenameTimestamp}-${nextThread}-${nextFrom}-${seq}.md`;
   const filePath = path.join(targetDirPath, filename);
   const data = {
     id,
@@ -763,8 +827,14 @@ export function getReplyTargetForMessage(message, from) {
   return nonSender;
 }
 
-export async function recoverOrphans(mailboxRoot) {
-  const messages = await collectMailboxMessages(mailboxRoot);
+export async function recoverOrphans(mailboxRoot, { project } = {}) {
+  const nextProject = normalizeProject(project);
+  if (!nextProject) {
+    throw new ClientError(400, "project required for recoverOrphans");
+  }
+  const messages = await collectMailboxMessages(mailboxRoot, {
+    project: nextProject
+  });
   const replyIndex = new Map();
 
   for (const message of messages) {
