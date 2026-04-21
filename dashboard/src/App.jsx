@@ -39,6 +39,7 @@ const translations = {
     noTimestamp: "Нет даты",
     timestampSent: "Отправлено",
     timestampReceived: "Получено",
+    notRead: "не прочитано",
     timestampAnswered: "Ответ отправлен",
     timestampArchived: "Отправлено в архив",
     statusAnswered: "Выполнено",
@@ -105,6 +106,7 @@ const translations = {
     noTimestamp: "No timestamp",
     timestampSent: "Sent",
     timestampReceived: "Received",
+    notRead: "not read",
     timestampAnswered: "Replied at",
     timestampArchived: "Archived at",
     statusAnswered: "Completed",
@@ -755,6 +757,12 @@ const styles = `
     color: var(--text-accent);
   }
 
+  .notReadBadge {
+    color: #c06600;
+    font-weight: 500;
+    font-style: italic;
+  }
+
   .cardMeta {
     margin: 0 0 6px;
     display: flex;
@@ -1074,8 +1082,7 @@ function formatTimestamp(value, lang, t) {
 
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC"
+    timeStyle: "short"
   }).format(new Date(parsed));
 }
 
@@ -1185,7 +1192,11 @@ function MessageCard({
         </span>
         <span className="timestamp">
           <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
-          {formatTimestamp(message.received_at || message.created, lang, t)}
+          {message.metadata?.received_at ? (
+            formatTimestamp(message.metadata.received_at, lang, t)
+          ) : (
+            <span className="notReadBadge">{t.notRead}</span>
+          )}
         </span>
         {message.answered_at ? (
           <span className="timestamp">
@@ -1360,6 +1371,33 @@ export default function App() {
       window.localStorage.setItem("mailbox-sound", soundEnabled ? "on" : "off");
     } catch {}
   }, [soundEnabled]);
+
+  // WebAudio unlock: AudioContext suspended until user gesture (browser AutoPlay policy).
+  // Attach one-time listeners on document for click/keydown to resume context so subsequent
+  // playNotificationChime() invocations play reliably.
+  useEffect(() => {
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          void ctx.resume().catch(() => {});
+          setTimeout(() => ctx.close().catch(() => {}), 100);
+        }
+      } catch {}
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+    document.addEventListener("click", unlock);
+    document.addEventListener("keydown", unlock);
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") {
