@@ -6,7 +6,7 @@ import {
   postNote
 } from "./api.js";
 
-const pollIntervalMs = 3000;
+const pollIntervalMs = 10000;
 const emptyData = {
   toClaude: [],
   toCodex: [],
