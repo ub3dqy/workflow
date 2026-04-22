@@ -34,6 +34,8 @@ const translations = {
     toClaude: "Для Claude",
     toCodex: "Для Codex",
     archive: "Архив",
+    archiveShow: "Показать архив",
+    archiveHide: "Скрыть архив",
     loading: "Загрузка...",
     noMessages: "Нет сообщений.",
     noTimestamp: "Нет даты",
@@ -101,6 +103,8 @@ const translations = {
     toClaude: "To Claude",
     toCodex: "To Codex",
     archive: "Archive",
+    archiveShow: "Show archive",
+    archiveHide: "Hide archive",
     loading: "Loading mailbox state...",
     noMessages: "No messages in this bucket yet.",
     noTimestamp: "No timestamp",
@@ -683,6 +687,30 @@ const styles = `
     margin: 0;
     color: var(--text-muted);
     line-height: 1.5;
+  }
+
+  .archiveToggle {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    background: var(--surface-control);
+    color: var(--text-strong);
+    box-shadow: var(--button-outline-border);
+    border: 0;
+    border-radius: 14px;
+    cursor: pointer;
+    text-align: center;
+    transition: transform 120ms ease;
+  }
+
+  .archiveToggle:hover {
+    transform: translateY(-1px);
+  }
+
+  .archiveToggle:focus-visible {
+    outline: 2px solid var(--text-strong);
+    outline-offset: 2px;
   }
 
   .card {
@@ -1305,6 +1333,7 @@ export default function App() {
   const [noteBody, setNoteBody] = useState("");
   const [activeAction, setActiveAction] = useState("");
   const [availableProjects, setAvailableProjects] = useState([]);
+  const [archiveExpanded, setArchiveExpanded] = useState(false);
   const [lang, setLang] = useState(() =>
     getStoredValue("mailbox-lang", "ru", supportedLanguages)
   );
@@ -1350,6 +1379,10 @@ export default function App() {
     try {
       window.localStorage.setItem("mailbox-project", project);
     } catch {}
+  }, [project]);
+
+  useEffect(() => {
+    setArchiveExpanded(false);
   }, [project]);
 
   useEffect(() => {
@@ -1848,30 +1881,51 @@ export default function App() {
                 </header>
 
                 <div className="columnBody">
-                  {messages[column.key].length === 0 ? (
-                    <p className="columnHint">
-                      {isLoading ? t.loading : t.noMessages}
-                    </p>
+                  {column.key === "archive" && !archiveExpanded && messages.archive.length > 0 ? (
+                    <button
+                      type="button"
+                      className="archiveToggle"
+                      onClick={() => setArchiveExpanded(true)}
+                    >
+                      {t.archiveShow} ({messages.archive.length})
+                    </button>
                   ) : (
-                    messages[column.key].map((message) => (
-                      <MessageCard
-                        activeAction={activeAction}
-                        isNoteOpen={noteTargetPath === message.relativePath}
-                        key={message.relativePath}
-                        lang={lang}
-                        message={message}
-                        onArchive={archiveInboxMessage}
-                        onCancelNote={cancelNote}
-                        onNoteBodyChange={setNoteBody}
-                        onOpenNote={openNote}
-                        onSendNote={sendNote}
-                        noteBody={
-                          noteTargetPath === message.relativePath ? noteBody : ""
-                        }
-                        showActions={column.key !== "archive"}
-                        t={t}
-                      />
-                    ))
+                    <>
+                      {column.key === "archive" && archiveExpanded ? (
+                        <button
+                          type="button"
+                          className="archiveToggle"
+                          onClick={() => setArchiveExpanded(false)}
+                        >
+                          {t.archiveHide}
+                        </button>
+                      ) : null}
+                      {messages[column.key].length === 0 ? (
+                        <p className="columnHint">
+                          {isLoading ? t.loading : t.noMessages}
+                        </p>
+                      ) : (
+                        messages[column.key].map((message) => (
+                          <MessageCard
+                            activeAction={activeAction}
+                            isNoteOpen={noteTargetPath === message.relativePath}
+                            key={message.relativePath}
+                            lang={lang}
+                            message={message}
+                            onArchive={archiveInboxMessage}
+                            onCancelNote={cancelNote}
+                            onNoteBodyChange={setNoteBody}
+                            onOpenNote={openNote}
+                            onSendNote={sendNote}
+                            noteBody={
+                              noteTargetPath === message.relativePath ? noteBody : ""
+                            }
+                            showActions={column.key !== "archive"}
+                            t={t}
+                          />
+                        ))
+                      )}
+                    </>
                   )}
                 </div>
               </section>
