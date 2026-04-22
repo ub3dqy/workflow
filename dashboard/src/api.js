@@ -14,7 +14,7 @@ async function parseJsonResponse(response, fallbackMessage) {
   return payload;
 }
 
-export async function fetchMessages(signal, project) {
+export async function fetchMessages({ signal, project } = {}) {
   const params = new URLSearchParams();
 
   if (project) {
@@ -75,7 +75,7 @@ export async function fetchAgentMessages({ project, session_id, signal } = {}) {
   return parseJsonResponse(response, `Agent API returned ${response.status}`);
 }
 
-export async function fetchRuntimeState(signal) {
+export async function fetchRuntimeState({ signal } = {}) {
   const response = await fetch("/api/runtime/state", {
     cache: "no-store",
     signal

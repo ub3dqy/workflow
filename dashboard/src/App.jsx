@@ -1319,6 +1319,21 @@ export default function App() {
     () => getStoredText("mailbox-sound", "on") !== "off"
   );
   const prevPendingCountsRef = useRef(null);
+  // Shared poll overlap guard (Stage 1 dashboard-perf). Both the messages
+  // refresh helper and the runtime-state load helper own per-stream
+  // AbortControllers so that every call-site — timer ticks, initial mount,
+  // action handlers, manual refresh button — aborts any in-flight request
+  // before issuing the next one. Monotonic request ids drop stale responses
+  // that arrive after a newer request has started (belt-and-suspenders for
+  // slow aborts). See docs/codex-tasks/dashboard-perf-s1-poll-guard.md.
+  const messagesAbortRef = useRef(null);
+  const messagesReqIdRef = useRef(0);
+  // Tracks the reqId of the most-recent foreground refresh so that
+  // isRefreshing can be released safely when a background tick preempts
+  // an in-flight foreground refresh (Codex round-3 Mandatory fix).
+  const messagesForegroundIdRef = useRef(0);
+  const runtimeAbortRef = useRef(null);
+  const runtimeReqIdRef = useRef(0);
 
   const t = translations[lang] ?? translations.ru;
   const columns = getColumns(t);
@@ -1338,11 +1353,18 @@ export default function App() {
   }, [project]);
 
   useEffect(() => {
-    const controller = new AbortController();
-
     async function load() {
+      // Abort any in-flight runtime-state fetch before starting a new one.
+      if (runtimeAbortRef.current && !runtimeAbortRef.current.signal.aborted) {
+        runtimeAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      runtimeAbortRef.current = controller;
+      const localId = ++runtimeReqIdRef.current;
+
       try {
-        const data = await fetchRuntimeState(controller.signal);
+        const data = await fetchRuntimeState({ signal: controller.signal });
+        if (localId !== runtimeReqIdRef.current) return; // stale-drop
         setRuntimeState({
           activeSessions: Array.isArray(data.activeSessions)
             ? data.activeSessions
@@ -1364,7 +1386,7 @@ export default function App() {
     const intervalId = window.setInterval(load, pollIntervalMs);
 
     return () => {
-      controller.abort();
+      runtimeAbortRef.current?.abort();
       window.clearInterval(intervalId);
     };
   }, []);
@@ -1469,13 +1491,33 @@ export default function App() {
   }, [theme]);
 
   const refreshMessages = useEffectEvent(
-    async ({ signal, background = false } = {}) => {
+    async ({ background = false } = {}) => {
+      // Shared overlap guard: abort in-flight fetch (if any) before starting
+      // a new one; monotonic request id drops a stale response that resolves
+      // after a newer call has started. Every call site — timer ticks,
+      // initial mount, action handlers, manual refresh button — flows
+      // through this helper, so all invocations share the same guard.
+      if (
+        messagesAbortRef.current &&
+        !messagesAbortRef.current.signal.aborted
+      ) {
+        messagesAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      messagesAbortRef.current = controller;
+      const localId = ++messagesReqIdRef.current;
+
       if (!background) {
+        messagesForegroundIdRef.current = localId;
         setIsRefreshing(true);
       }
 
       try {
-        const nextMessages = await fetchMessages(signal, project);
+        const nextMessages = await fetchMessages({
+          signal: controller.signal,
+          project
+        });
+        if (localId !== messagesReqIdRef.current) return; // stale-drop
         const nextProjects = Array.isArray(nextMessages.projects)
           ? nextMessages.projects.filter(
               (value) => typeof value === "string" && value.trim().length > 0
@@ -1505,24 +1547,37 @@ export default function App() {
           setError(loadError instanceof Error ? loadError.message : String(loadError));
         }
       } finally {
-        setIsLoading(false);
-        if (!background) {
+        // Release the foreground UI lock whenever THIS call is the most
+        // recent foreground refresh — even if it was preempted by a
+        // background tick. Any newer foreground call would have bumped
+        // messagesForegroundIdRef; only the latest foreground owns the
+        // lock, so releasing it here is correct (no-op if another
+        // foreground is already active).
+        if (!background && messagesForegroundIdRef.current === localId) {
           setIsRefreshing(false);
+        }
+        // Initial-load marker: clear only on non-stale completion (keeps
+        // the pre-fix behavior where `isLoading` transitions true→false
+        // exactly once, on the first successful fetch).
+        if (localId === messagesReqIdRef.current) {
+          setIsLoading(false);
         }
       }
     }
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    void refreshMessages({ signal: controller.signal });
+    // Project change → re-mount of this effect → cleanup aborts any
+    // in-flight fetch (via messagesAbortRef) before the fresh effect
+    // starts the initial fetch for the new project.
+    void refreshMessages();
 
     const intervalId = window.setInterval(() => {
       void refreshMessages({ background: true });
     }, pollIntervalMs);
 
     return () => {
-      controller.abort();
+      messagesAbortRef.current?.abort();
       window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
