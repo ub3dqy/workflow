@@ -477,6 +477,16 @@ Detailed delta (v2, post-Codex-review):
 - **Mitigation**: `normalizeProject` will reject slugs containing `__` (to be added as a pre-flight guard in Change 0 implementation). Empirical check: observed live project slugs (`workflow`, `messenger_test`) contain max one `_` — compatible.
 - **Residual**: new projects must follow slug convention `[a-z0-9][a-z0-9_-]*` without `__` substring. Documented in `local-claude-codex-mailbox-workflow.md` §11.1 storage invariant.
 
+### G13 — NTFS case-sensitivity in `resolveCallerProject` (Codex round-4 Critical, post-verification)
+
+- **What**: `resolveCallerProject` (`scripts/mailbox-lib.mjs:~96-97` original) used `process.platform === "win32" ? value.toLowerCase() : value` for case-fold. Sessions are registered on Windows with cwd `E:\Project\workflow` (capital P). When an agent in WSL resolves its cwd, Node reports the actual user-typed casing (e.g., `/mnt/e/project/workflow` if user cd'd with lowercase). Under `process.platform === 'linux'` (WSL), case-fold returned identity → string-equality fails → `resolveCallerProject` returns empty → CLI blocks `list/reply/archive/recover/send` on same-project operations with message «<handler> requires bound session for current cwd».
+- **Origin**: Codex round-4 verification `2026-04-22T08:04:32Z-codex-007` + `docs/codex-tasks/read-isolation-work-verification.md`.
+- **Root cause**: the platform-gated case-fold assumed case-sensitivity matches `process.platform`, but the underlying filesystem is NTFS (case-insensitive) regardless of whether the process is native Windows or WSL at `/mnt/<drive>/`. Same NTFS volume accessed through either path MUST match.
+- **Fix applied**: replaced gated case-fold with unconditional `value.toLowerCase()`. Inline comment documents the NTFS-always assumption. Both sides of the comparison (target cwd + registered entry cwd) go through `toHostPath` first, so drive-letter casing is pre-normalized; only the path remainder differs in case.
+- **Probe V24 added**: tests 12 cases covering Windows (`E:\Project\workflow`, `E:\project\workflow`, `E:\PROJECT\WORKFLOW`), WSL (`/mnt/e/Project/workflow`, `/mnt/e/project/workflow`, `/mnt/e/PROJECT/workflow`), subdirs under both, and unrelated paths. All expected outcomes: 9 matches return `"workflow"`, 3 non-matches return `""`.
+- **Regression check**: V9-V12 CLI probes from Windows native bash re-run post-fix — still PASS (Windows-side was never case-sensitive). No functional regression.
+- **Residual**: POSIX genuinely-case-sensitive filesystems (non-NTFS Linux) would experience false matches if two paths differ only in case. Not applicable to this project (all agent cwds are NTFS-backed); documented as a known assumption.
+
 ### G11 — Migration atomicity across WSL/Windows + execution ownership
 
 - **What**: migration script renames live `agent-mailbox/` files. Concurrent readers (supervisor pollTick, dashboard UI, active Claude/Codex CLI) could see partial-rename flicker.

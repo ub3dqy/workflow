@@ -93,8 +93,13 @@ export async function resolveCallerProject({ cwd, runtimeRoot }) {
   }
 
   const targetNormalized = path.normalize(targetHost).replace(/[\\/]+$/, "");
-  const caseFold = (value) =>
-    process.platform === "win32" ? value.toLowerCase() : value;
+  // NTFS (Windows + WSL /mnt/<letter>/ mounts) is case-insensitive. Sessions
+  // are registered on Windows (capital drive + mixed case), but agent cwd may
+  // arrive from WSL with lowercase drive path (`/mnt/e/project/workflow` vs
+  // the registered `/mnt/e/Project/workflow`). Case-fold both sides regardless
+  // of process.platform so same-project CLI operations work across WSL ↔
+  // Windows even when WSL cwd casing differs. See Codex round-4 verification.
+  const caseFold = (value) => value.toLowerCase();
   const targetFolded = caseFold(targetNormalized);
 
   for (const entry of list) {
