@@ -25,7 +25,6 @@ const translations = {
     messages: "Сообщения",
     lastSync: "Обновлено",
     waitingForLoad: "Ожидание загрузки",
-    refreshNow: "Обновить",
     refreshing: "Обновление...",
     mailboxEmpty: "Mailbox пуст",
     emptyHint: "Создайте первое сообщение как markdown-файл в",
@@ -93,7 +92,6 @@ const translations = {
     messages: "Messages",
     lastSync: "Last sync",
     waitingForLoad: "Waiting for first load",
-    refreshNow: "Refresh now",
     refreshing: "Refreshing...",
     mailboxEmpty: "Mailbox is empty",
     emptyHint: "Create the first message as a markdown file in",
@@ -429,8 +427,7 @@ const styles = `
 
   .langButton,
   .soundButton,
-  .projectSelect,
-  .refreshButton {
+  .projectSelect {
     border: 0;
     border-radius: 999px;
     padding: 12px 18px;
@@ -465,27 +462,15 @@ const styles = `
     cursor: pointer;
   }
 
-  .refreshButton {
-    background: var(--button-primary-bg);
-    color: var(--button-primary-text);
-    box-shadow: var(--button-primary-shadow);
-  }
-
   .langButton:hover,
   .soundButton:hover,
   .projectSelect:hover {
     transform: translateY(-1px);
   }
 
-  .refreshButton:hover {
-    /* No translateY: prevents hover-zone jitter loop when cursor sits near button edge */
-    box-shadow: var(--button-primary-shadow-hover);
-  }
-
   .langButton:disabled,
   .soundButton:disabled,
-  .projectSelect:disabled,
-  .refreshButton:disabled {
+  .projectSelect:disabled {
     cursor: progress;
     pointer-events: none;
     transform: none;
@@ -678,6 +663,8 @@ const styles = `
 
   .columnBody {
     display: grid;
+    grid-auto-rows: min-content;
+    align-content: start;
     gap: 14px;
     padding: 16px;
     overflow-y: auto;
@@ -721,6 +708,27 @@ const styles = `
     border-radius: 18px;
     background: var(--surface-card);
     padding: 16px;
+    min-width: 0;
+  }
+
+  .card--collapsed {
+    padding: 10px 14px;
+  }
+
+  .card--collapsed .cardHeader {
+    margin-bottom: 0;
+  }
+
+  .card--collapsed .threadTitle {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .card--collapsed .cardHeading {
+    overflow: hidden;
   }
 
   .cardHeader {
@@ -731,6 +739,22 @@ const styles = `
     margin-bottom: 10px;
     cursor: pointer;
     user-select: none;
+  }
+
+  .cardTitleLine {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .unreadDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e07a00;
+    flex-shrink: 0;
   }
 
   .cardHeader:focus-visible {
@@ -751,16 +775,6 @@ const styles = `
     font-size: 14px;
     line-height: 1.25;
     margin-left: 8px;
-  }
-
-  .bodyPreview {
-    margin: 0;
-    color: var(--text-muted);
-    line-height: 1.4;
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .cardHeading {
@@ -1217,13 +1231,6 @@ function MessageCard({
 
   const isArchived = !showActions;
 
-  const bodyPreview = useMemo(() => {
-    if (!message.body) return "";
-    const firstLine = message.body.split("\n").find((line) => line.trim().length > 0) || "";
-    const trimmed = firstLine.trim();
-    return trimmed.length > 160 ? `${trimmed.slice(0, 160)}…` : trimmed;
-  }, [message.body]);
-
   const renderedHtml = useMemo(() => {
     if (!expanded || !message.body) return "";
     return String(marked.parse(message.body));
@@ -1236,8 +1243,10 @@ function MessageCard({
     }
   };
 
+  const showUnreadDot = !isArchived && !message.metadata?.received_at;
+
   return (
-    <article className="card">
+    <article className={`card${expanded ? "" : " card--collapsed"}`}>
       <header
         className="cardHeader"
         role="button"
@@ -1247,140 +1256,145 @@ function MessageCard({
         onKeyDown={handleHeaderKey}
       >
         <div className="cardHeading">
-          <h3 className="threadTitle">{message.thread || "—"}</h3>
-          <div className="cardTags">
-            {isArchived ? (
-              <span className="chip">
-                {message.resolution === "answered"
-                  ? t.statusAnswered
-                  : message.resolution === "no-reply-needed"
-                    ? t.statusNoReplyNeeded
-                    : message.resolution === "superseded"
-                      ? t.statusSuperseded
-                      : message.resolution || message.status || "archived"}
-              </span>
+          <div className="cardTitleLine">
+            {showUnreadDot ? (
+              <span className="unreadDot" title={t.notRead} aria-label={t.notRead} />
             ) : null}
-            {message.project ? (
-              <span className="chip chipProject">{message.project}</span>
-            ) : null}
+            <h3 className="threadTitle">{message.thread || "—"}</h3>
           </div>
+          {expanded ? (
+            <div className="cardTags">
+              {isArchived ? (
+                <span className="chip">
+                  {message.resolution === "answered"
+                    ? t.statusAnswered
+                    : message.resolution === "no-reply-needed"
+                      ? t.statusNoReplyNeeded
+                      : message.resolution === "superseded"
+                        ? t.statusSuperseded
+                        : message.resolution || message.status || "archived"}
+                </span>
+              ) : null}
+              {message.project ? (
+                <span className="chip chipProject">{message.project}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <span className="expandIndicator" aria-hidden="true">{expanded ? "▾" : "▸"}</span>
       </header>
 
-      <p className="cardMeta">
-        <span className="metaPart">
-          <span className="metaFrom">{message.from || "?"}</span>
-          <span className="metaArrow">→</span>
-          <span className="metaTo">{message.to || "?"}</span>
-        </span>
-        {message.reply_to ? (
-          <>
-            <span className="metaSep">·</span>
-            <span className="metaPart mono">
-              {t.replyTo}: {message.reply_to}
+      {expanded ? (
+        <>
+          <p className="cardMeta">
+            <span className="metaPart">
+              <span className="metaFrom">{message.from || "?"}</span>
+              <span className="metaArrow">→</span>
+              <span className="metaTo">{message.to || "?"}</span>
             </span>
-          </>
-        ) : null}
-      </p>
+            {message.reply_to ? (
+              <>
+                <span className="metaSep">·</span>
+                <span className="metaPart mono">
+                  {t.replyTo}: {message.reply_to}
+                </span>
+              </>
+            ) : null}
+          </p>
 
-      <p className="cardFilename mono">{message.relativePath}</p>
+          <p className="cardFilename mono">{message.relativePath}</p>
 
-      <div className="cardTimestamps">
-        <span className="timestamp">
-          <span className="timestampLabel">{t.timestampSent}:</span>{" "}
-          {formatTimestamp(message.created, lang, t)}
-        </span>
-        <span className="timestamp">
-          <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
-          {message.metadata?.received_at ? (
-            formatTimestamp(message.metadata.received_at, lang, t)
-          ) : (
-            <span className="notReadBadge">{t.notRead}</span>
-          )}
-        </span>
-        {message.answered_at ? (
-          <span className="timestamp">
-            <span className="timestampLabel">{t.timestampAnswered}:</span>{" "}
-            {formatTimestamp(message.answered_at, lang, t)}
-          </span>
-        ) : null}
-        {message.metadata?.archived_at ? (
-          <span className="timestamp">
-            <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
-            {formatTimestamp(message.metadata.archived_at, lang, t)}
-          </span>
-        ) : null}
-      </div>
-
-      {message.related_files.length > 0 ? (
-        <div className="relatedFiles">
-          <span className="relatedTitle">{t.relatedFiles}</span>
-          <div className="relatedList">
-            {message.related_files.map((relatedFile) => (
-              <span className="pathChip mono" key={relatedFile}>
-                {relatedFile}
+          <div className="cardTimestamps">
+            <span className="timestamp">
+              <span className="timestampLabel">{t.timestampSent}:</span>{" "}
+              {formatTimestamp(message.created, lang, t)}
+            </span>
+            <span className="timestamp">
+              <span className="timestampLabel">{t.timestampReceived}:</span>{" "}
+              {message.metadata?.received_at ? (
+                formatTimestamp(message.metadata.received_at, lang, t)
+              ) : (
+                <span className="notReadBadge">{t.notRead}</span>
+              )}
+            </span>
+            {message.answered_at ? (
+              <span className="timestamp">
+                <span className="timestampLabel">{t.timestampAnswered}:</span>{" "}
+                {formatTimestamp(message.answered_at, lang, t)}
               </span>
-            ))}
+            ) : null}
+            {message.metadata?.archived_at ? (
+              <span className="timestamp">
+                <span className="timestampLabel">{t.timestampArchived}:</span>{" "}
+                {formatTimestamp(message.metadata.archived_at, lang, t)}
+              </span>
+            ) : null}
           </div>
-        </div>
-      ) : null}
 
-      {renderActionRow()}
+          {message.related_files.length > 0 ? (
+            <div className="relatedFiles">
+              <span className="relatedTitle">{t.relatedFiles}</span>
+              <div className="relatedList">
+                {message.related_files.map((relatedFile) => (
+                  <span className="pathChip mono" key={relatedFile}>
+                    {relatedFile}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
-      {message.body ? (
-        expanded ? (
-          <section
-            className="body"
-            dangerouslySetInnerHTML={{ __html: renderedHtml }}
-          />
-        ) : (
-          <p className="bodyPreview">{bodyPreview}</p>
-        )
-      ) : null}
+          {renderActionRow()}
 
-      {renderActionRow()}
+          {message.body ? (
+            <section
+              className="body"
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
+          ) : null}
 
-      {isNoteOpen ? (
-        <form
-          className="replyForm"
-          ref={noteFormRef}
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSendNote(message);
-          }}
-        >
-          <label className="replyLabel" htmlFor={`note-${message.relativePath}`}>
-            {t.noteLabel}
-          </label>
-          <textarea
-            className="replyTextarea"
-            id={`note-${message.relativePath}`}
-            onChange={(event) => {
-              onNoteBodyChange(event.target.value);
-            }}
-            placeholder={t.notePlaceholder}
-            value={noteBody}
-          />
-          <p className="replyHint">{t.noteHint}</p>
-          <div className="replyActions">
-            <button
-              className="cardButton cardButton--primary"
-              disabled={Boolean(activeAction)}
-              type="submit"
+          {isNoteOpen ? (
+            <form
+              className="replyForm"
+              ref={noteFormRef}
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSendNote(message);
+              }}
             >
-              {isNoting ? t.addingNote : t.sendNote}
-            </button>
-            <button
-              className="cardButton cardButton--ghost"
-              disabled={Boolean(activeAction)}
-              onClick={onCancelNote}
-              type="button"
-            >
-              {t.cancel}
-            </button>
-          </div>
-        </form>
+              <label className="replyLabel" htmlFor={`note-${message.relativePath}`}>
+                {t.noteLabel}
+              </label>
+              <textarea
+                className="replyTextarea"
+                id={`note-${message.relativePath}`}
+                onChange={(event) => {
+                  onNoteBodyChange(event.target.value);
+                }}
+                placeholder={t.notePlaceholder}
+                value={noteBody}
+              />
+              <p className="replyHint">{t.noteHint}</p>
+              <div className="replyActions">
+                <button
+                  className="cardButton cardButton--primary"
+                  disabled={Boolean(activeAction)}
+                  type="submit"
+                >
+                  {isNoting ? t.addingNote : t.sendNote}
+                </button>
+                <button
+                  className="cardButton cardButton--ghost"
+                  disabled={Boolean(activeAction)}
+                  onClick={onCancelNote}
+                  type="button"
+                >
+                  {t.cancel}
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </>
       ) : null}
     </article>
   );
@@ -1447,6 +1461,17 @@ export default function App() {
   const columns = getColumns(t);
   const resolvedTheme =
     theme === "auto" ? (systemPrefersDark ? "dark" : "light") : theme;
+
+  const pendingReceivedMap = useMemo(() => {
+    const map = new Map();
+    for (const m of messages.toClaude) {
+      map.set(m.relativePath, Boolean(m.metadata?.received_at));
+    }
+    for (const m of messages.toCodex) {
+      map.set(m.relativePath, Boolean(m.metadata?.received_at));
+    }
+    return map;
+  }, [messages.toClaude, messages.toCodex]);
 
   useEffect(() => {
     try {
@@ -1876,17 +1901,6 @@ export default function App() {
                     ))}
                   </div>
 
-                  <button
-                    aria-busy={isRefreshing}
-                    className="refreshButton"
-                    disabled={isRefreshing}
-                    onClick={() => {
-                      void refreshMessages();
-                    }}
-                    type="button"
-                  >
-                    {t.refreshNow}
-                  </button>
                 </div>
               </div>
             </div>
@@ -1920,18 +1934,24 @@ export default function App() {
                 <p className="columnHint">{t.noPendingMessages}</p>
               ) : (
                 <ul className="runtimeList">
-                  {runtimeState.pendingIndex.map((message) => (
-                    <li key={message.relativePath}>
-                      <span className="chip">{message.to}</span>
-                      {message.project ? (
-                        <span className="chip chipProject">{message.project}</span>
-                      ) : null}
-                      <span className="mono">{message.thread}</span>
-                      <span className="timestamp">
-                        {formatTimestamp(message.created, lang, t)}
-                      </span>
-                    </li>
-                  ))}
+                  {runtimeState.pendingIndex.map((message) => {
+                    const isUnread = !pendingReceivedMap.get(message.relativePath);
+                    return (
+                      <li key={message.relativePath}>
+                        {isUnread ? (
+                          <span className="unreadDot" title={t.notRead} aria-label={t.notRead} />
+                        ) : null}
+                        <span className="chip">{message.to}</span>
+                        {message.project ? (
+                          <span className="chip chipProject">{message.project}</span>
+                        ) : null}
+                        <span className="mono">{message.thread}</span>
+                        <span className="timestamp">
+                          {formatTimestamp(message.created, lang, t)}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
