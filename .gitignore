@@ -15,3 +15,9 @@ Thumbs.db
 
 # Codex CLI sandbox state (personal, per-session)
 .codex/sessions/
+
+# Personal / local-only configuration and docs
+.claude/settings.local.json
+AGENTS.md
+CLAUDE.md
+docs/codex-system-prompt.md
