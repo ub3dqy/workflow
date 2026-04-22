@@ -757,6 +757,10 @@ const styles = `
     flex-shrink: 0;
   }
 
+  .cardTitleLine .chipProject {
+    flex-shrink: 0;
+  }
+
   .cardHeader:focus-visible {
     outline: 2px solid var(--text-strong);
     outline-offset: 2px;
@@ -1260,24 +1264,22 @@ function MessageCard({
             {showUnreadDot ? (
               <span className="unreadDot" title={t.notRead} aria-label={t.notRead} />
             ) : null}
+            {message.project && (!isArchived || expanded) ? (
+              <span className="chip chipProject">{message.project}</span>
+            ) : null}
             <h3 className="threadTitle">{message.thread || "—"}</h3>
           </div>
-          {expanded ? (
+          {expanded && isArchived ? (
             <div className="cardTags">
-              {isArchived ? (
-                <span className="chip">
-                  {message.resolution === "answered"
-                    ? t.statusAnswered
-                    : message.resolution === "no-reply-needed"
-                      ? t.statusNoReplyNeeded
-                      : message.resolution === "superseded"
-                        ? t.statusSuperseded
-                        : message.resolution || message.status || "archived"}
-                </span>
-              ) : null}
-              {message.project ? (
-                <span className="chip chipProject">{message.project}</span>
-              ) : null}
+              <span className="chip">
+                {message.resolution === "answered"
+                  ? t.statusAnswered
+                  : message.resolution === "no-reply-needed"
+                    ? t.statusNoReplyNeeded
+                    : message.resolution === "superseded"
+                      ? t.statusSuperseded
+                      : message.resolution || message.status || "archived"}
+              </span>
             </div>
           ) : null}
         </div>
