@@ -7,10 +7,6 @@ const requireFromDashboard = createRequire(
   new URL("../dashboard/package.json", import.meta.url)
 );
 const matter = requireFromDashboard("gray-matter");
-const markedModule = await import(
-  pathToFileURL(requireFromDashboard.resolve("marked")).href
-);
-const { marked } = markedModule;
 
 export const host = "127.0.0.1";
 export const port = 3003;
@@ -28,11 +24,6 @@ const allowedArchiveResolutions = new Set([
   "no-reply-needed",
   "superseded"
 ]);
-
-marked.use({
-  breaks: true,
-  gfm: true
-});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -549,7 +540,6 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
     }),
     related_files: relatedFiles,
     body,
-    html: body ? String(marked.parse(body)) : "",
     metadata: parsed.data,
     sortValue: toSortValue(created)
   };

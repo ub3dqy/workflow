@@ -1,10 +1,13 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { marked } from "marked";
 import {
   archiveMessage,
   fetchMessages,
   fetchRuntimeState,
   postNote
 } from "./api.js";
+
+marked.use({ breaks: true, gfm: true });
 
 const pollIntervalMs = 10000;
 const emptyData = {
@@ -726,6 +729,38 @@ const styles = `
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .cardHeader:focus-visible {
+    outline: 2px solid var(--text-strong);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  .cardHeader:hover .threadTitle {
+    text-decoration: underline;
+    text-decoration-color: var(--text-muted);
+    text-underline-offset: 3px;
+  }
+
+  .expandIndicator {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.25;
+    margin-left: 8px;
+  }
+
+  .bodyPreview {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.4;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .cardHeading {
@@ -1125,6 +1160,7 @@ function formatTimestamp(value, lang, t) {
 
 function MessageCard({
   activeAction,
+  expanded,
   isNoteOpen,
   lang,
   message,
@@ -1133,6 +1169,7 @@ function MessageCard({
   onNoteBodyChange,
   onOpenNote,
   onSendNote,
+  onToggleExpanded,
   noteBody,
   showActions,
   t
@@ -1180,9 +1217,35 @@ function MessageCard({
 
   const isArchived = !showActions;
 
+  const bodyPreview = useMemo(() => {
+    if (!message.body) return "";
+    const firstLine = message.body.split("\n").find((line) => line.trim().length > 0) || "";
+    const trimmed = firstLine.trim();
+    return trimmed.length > 160 ? `${trimmed.slice(0, 160)}…` : trimmed;
+  }, [message.body]);
+
+  const renderedHtml = useMemo(() => {
+    if (!expanded || !message.body) return "";
+    return String(marked.parse(message.body));
+  }, [expanded, message.body]);
+
+  const handleHeaderKey = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onToggleExpanded(message.relativePath);
+    }
+  };
+
   return (
     <article className="card">
-      <header className="cardHeader">
+      <header
+        className="cardHeader"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => onToggleExpanded(message.relativePath)}
+        onKeyDown={handleHeaderKey}
+      >
         <div className="cardHeading">
           <h3 className="threadTitle">{message.thread || "—"}</h3>
           <div className="cardTags">
@@ -1202,6 +1265,7 @@ function MessageCard({
             ) : null}
           </div>
         </div>
+        <span className="expandIndicator" aria-hidden="true">{expanded ? "▾" : "▸"}</span>
       </header>
 
       <p className="cardMeta">
@@ -1264,11 +1328,15 @@ function MessageCard({
 
       {renderActionRow()}
 
-      {message.html ? (
-        <section
-          className="body"
-          dangerouslySetInnerHTML={{ __html: message.html }}
-        />
+      {message.body ? (
+        expanded ? (
+          <section
+            className="body"
+            dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          />
+        ) : (
+          <p className="bodyPreview">{bodyPreview}</p>
+        )
       ) : null}
 
       {renderActionRow()}
@@ -1334,6 +1402,7 @@ export default function App() {
   const [activeAction, setActiveAction] = useState("");
   const [availableProjects, setAvailableProjects] = useState([]);
   const [archiveExpanded, setArchiveExpanded] = useState(false);
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [lang, setLang] = useState(() =>
     getStoredValue("mailbox-lang", "ru", supportedLanguages)
   );
@@ -1348,6 +1417,16 @@ export default function App() {
     () => getStoredText("mailbox-sound", "on") !== "off"
   );
   const prevPendingCountsRef = useRef(null);
+
+  const toggleExpanded = useCallback((relPath) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(relPath)) next.delete(relPath);
+      else next.add(relPath);
+      return next;
+    });
+  }, []);
+
   // Shared poll overlap guard (Stage 1 dashboard-perf). Both the messages
   // refresh helper and the runtime-state load helper own per-stream
   // AbortControllers so that every call-site — timer ticks, initial mount,
@@ -1908,6 +1987,7 @@ export default function App() {
                         messages[column.key].map((message) => (
                           <MessageCard
                             activeAction={activeAction}
+                            expanded={expandedIds.has(message.relativePath)}
                             isNoteOpen={noteTargetPath === message.relativePath}
                             key={message.relativePath}
                             lang={lang}
@@ -1917,6 +1997,7 @@ export default function App() {
                             onNoteBodyChange={setNoteBody}
                             onOpenNote={openNote}
                             onSendNote={sendNote}
+                            onToggleExpanded={toggleExpanded}
                             noteBody={
                               noteTargetPath === message.relativePath ? noteBody : ""
                             }
