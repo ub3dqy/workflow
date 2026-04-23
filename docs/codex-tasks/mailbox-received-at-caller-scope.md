@@ -6,7 +6,7 @@
 **Planning-audit**: `docs/codex-tasks/mailbox-received-at-caller-scope-planning-audit.md`
 **Execution report**: `docs/codex-tasks/mailbox-received-at-caller-scope-report.md` (TBD after exec)
 **Work-verification** (Codex, post-exec): `docs/codex-tasks/mailbox-received-at-caller-scope-work-verification.md` (TBD)
-**Depends on**: current `master` at `f9cd404`.
+**Depends on**: current `master` at the Stage-6 docs-landing commit (`6c347e5` for v1; this v2 revision lands as a follow-up commit on top of it — see revised base in `-planning-audit.md §1.0`).
 **Executor**: Claude. **Verifier**: Codex.
 
 ---
@@ -29,10 +29,12 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 
 | # | File | Change |
 |---|---|---|
-| 1 | `scripts/mailbox-lib.mjs` — new helper `resolveCallerAgent({ cwd, runtimeRoot })` | Mirror of `resolveCallerProject`: read `sessions.json`, find the session whose `cwd` matches or is an ancestor of the caller's `cwd` (case-folded on Windows/WSL per `feedback_mailbox_project_scope`), return `session.agent` (`"claude"` or `"codex"`) or `null`. |
-| 2 | `scripts/mailbox.mjs` — `handleList` at `:195-223` | After `resolveCallerProject` call, add `const boundAgent = await resolveCallerAgent({ cwd: process.cwd(), runtimeRoot })`. If `!boundAgent` → existing `requires bound session` error already covers this (same ancestor walk). In the marking loop, restrict bucket filter from `"to-claude" \|\| "to-codex"` to `"to-\${boundAgent}"`. Messages in the opposite bucket are listed for visibility but NOT marked. |
-| 3 | `dashboard/server.js` — agent router `GET /messages` at `:215-233` | Replace `const toMark = [...toClaude, ...toCodex].filter(…pending)` with `const callerInbox = request.agentSession.agent === "claude" ? toClaude : toCodex; const toMark = callerInbox.filter(…pending)`. Add defensive sanity check: if `request.agentSession.agent` is neither `"claude"` nor `"codex"` → skip marking entirely (do not fall through to marking both). |
-| 4 | `scripts/mailbox.mjs` — `handleReply` at `:275-282` | **No change.** Reply-target marking already has correct semantics: the caller IS the recipient of the message they're replying to, by construction. |
+| 1 | `scripts/mailbox-lib.mjs` — new internal helper `resolveCallerSession({ cwd, runtimeRoot })` | Session-row lookup shared by project and agent resolvers. Reads `sessions.json`, does the same case-folded exact-or-ancestor `cwd` match as the current `resolveCallerProject`, returns the matching session object (with `agent`, `project`, etc.) or `null`. |
+| 2 | `scripts/mailbox-lib.mjs` — refactor `resolveCallerProject` | Now a thin wrapper: `resolveCallerSession(...) → normalizeProject(entry?.project) \|\| ""`. Behaviour unchanged; body de-duplicated. Applied per Codex recommendation to avoid cloning the full lookup. |
+| 3 | `scripts/mailbox-lib.mjs` — new export `resolveCallerAgent({ cwd, runtimeRoot })` | Thin wrapper: `resolveCallerSession(...) → sanitizeAgent(entry?.agent) \|\| ""`, where `sanitizeAgent` accepts only `"claude"` / `"codex"` (anything else → `""`). |
+| 4 | `scripts/mailbox.mjs` — `handleList` at `:195-223` | After `resolveCallerProject` call, look up `boundAgent`. In the marking loop, restrict bucket filter from `"to-claude" \|\| "to-codex"` to `"to-\${boundAgent}"`. If `boundAgent === ""` → skip marking entirely (list still prints, keeping visibility). |
+| 5 | `scripts/mailbox.mjs` — `handleReply` at `:274-282` | **Scope change from v1 plan.** Reply path DOES still have the bug: `readMessageByRelativePath` accepts any in-project `to-claude/*` or `to-codex/*` path, so a Claude caller could reply-mark a `to-codex` letter. Fix: after `readMessageByRelativePath`, look up `boundAgent`; guard `markMessageReceived(location)` with `targetMessage.to === boundAgent`. If the direction is wrong (e.g. Claude replying to a letter NOT addressed to Claude), the reply can still proceed (existing behaviour), but `received_at` is not stamped. |
+| 6 | `dashboard/server.js` — agent router `GET /messages` at `:215-233` | Replace `const toMark = [...toClaude, ...toCodex].filter(…pending)` with caller-inbox-only filter driven by `request.agentSession.agent`. Unknown role → skip marking. |
 
 **Non-changes**:
 
@@ -43,7 +45,7 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 - Existing letters with potentially-false `received_at` — NOT rewritten. The mark is already in frontmatter; we have no reliable way to tell which are genuine vs. bogus, and rewriting history would break ordering and trust. The fix is forward-only.
 - Bucket-filter output when listing — `list --bucket to-codex` still shows Codex's pending messages (visibility preserved); it just stops marking them.
 
-**Total estimated touch**: 2 files for code + 1 new helper export = ~50-80 LOC net. Single concern. Below Rule #8 threshold; fits in one commit.
+**Total estimated touch**: 2 files + 3 new/refactored helper functions = ~80-120 LOC net (v2 scope expanded for reply fix + `resolveCallerSession` extraction). Single concern. Still within Rule #8 one-commit threshold.
 
 ## 3. Expected behaviour after fix
 
@@ -52,8 +54,8 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 | Claude runs `mailbox.mjs list --bucket all --project workflow` | All pending in `to-claude` + `to-codex` get `received_at` | Only `to-claude/*.md` pending get `received_at`; `to-codex/*.md` untouched |
 | Claude runs `mailbox.mjs list --bucket to-codex --project workflow` | `to-codex` pending get `received_at` | `to-codex` pending LISTED but NOT marked |
 | Codex runs the same list commands | Same problem mirrored | Only `to-codex` marks; `to-claude` untouched |
-| Claude runs `mailbox.mjs reply …` targeting a `to-claude` letter | Marks target (correct) | Same (unchanged) |
-| Claude runs `mailbox.mjs reply …` targeting a `to-codex` letter (edge case: agent replying to a letter they sent?) | Marks target | Same (reply-target marking is about read semantics of the replier, which IS correct here) |
+| Claude runs `mailbox.mjs reply …` targeting a `to-claude` letter (normal case: replying to letter addressed to Claude) | Marks target (correct) | Same: `targetMessage.to === "claude" === boundAgent` → mark proceeds |
+| Claude runs `mailbox.mjs reply …` targeting a `to-codex` letter (edge case: Claude replying to a letter NOT addressed to Claude) | Marks target (BUG — stamps wrong-direction) | Reply proceeds, but `markMessageReceived` SKIPPED because `targetMessage.to !== boundAgent` |
 | Dashboard `GET /api/messages` (non-agent) | No marking | No marking (unchanged) |
 | Dashboard `GET /api/agent/messages` with `session.agent=claude` | Marks both buckets | Marks only `to-claude` |
 | Dashboard `GET /api/agent/messages` with `session.agent=codex` | Marks both buckets | Marks only `to-codex` |
@@ -69,12 +71,7 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 
 ## 5. Rollback
 
-```
-git revert <stage-6-commit>
-git push origin master
-```
-
-Single commit, 2 files. Reverts the caller-scope check; restores the over-eager marking. No data migration to undo.
+`git revert <stage-6-commit>` locally. Pushing the revert requires an explicit user command per Rule #11 — not implied by this document. Revert is a single commit touching 2 code files; it restores the over-eager marking. No data migration to undo.
 
 ## 6. Connection to the broader mailbox-read discussion
 
