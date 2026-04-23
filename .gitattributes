@@ -1,0 +1,16 @@
+# Enforce LF line endings on checkout and normalize on commit.
+# Keeps Windows Git Bash, WSL, Linux, and macOS clients in agreement,
+# eliminating cross-client "modified: …" noise from autocrlf mismatches.
+
+* text=auto eol=lf
+
+# Binary / image formats — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.pdf binary
+*.zip binary
+*.gz binary
