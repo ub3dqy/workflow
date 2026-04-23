@@ -33,8 +33,9 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 | 2 | `scripts/mailbox-lib.mjs` — refactor `resolveCallerProject` | Now a thin wrapper: `resolveCallerSession(...) → normalizeProject(entry?.project) \|\| ""`. Behaviour unchanged; body de-duplicated. Applied per Codex recommendation to avoid cloning the full lookup. |
 | 3 | `scripts/mailbox-lib.mjs` — new export `resolveCallerAgent({ cwd, runtimeRoot })` | Thin wrapper: `resolveCallerSession(...) → sanitizeAgent(entry?.agent) \|\| ""`, where `sanitizeAgent` accepts only `"claude"` / `"codex"` (anything else → `""`). |
 | 4 | `scripts/mailbox.mjs` — `handleList` at `:195-223` | After `resolveCallerProject` call, look up `boundAgent`. In the marking loop, restrict bucket filter from `"to-claude" \|\| "to-codex"` to `"to-\${boundAgent}"`. If `boundAgent === ""` → skip marking entirely (list still prints, keeping visibility). |
-| 5 | `scripts/mailbox.mjs` — `handleReply` at `:274-282` | **Scope change from v1 plan.** Reply path DOES still have the bug: `readMessageByRelativePath` accepts any in-project `to-claude/*` or `to-codex/*` path, so a Claude caller could reply-mark a `to-codex` letter. Fix: after `readMessageByRelativePath`, look up `boundAgent`; guard `markMessageReceived(location)` with `targetMessage.to === boundAgent`. If the direction is wrong (e.g. Claude replying to a letter NOT addressed to Claude), the reply can still proceed (existing behaviour), but `received_at` is not stamped. |
+| 5 | `scripts/mailbox.mjs` — `handleReply` at `:274-303` | **Scope change from v1 plan. Tightened again in v3 per Codex round-2.** Reply path has a bigger hole than just marking: the caller can reply to a letter in ANY bucket within project scope, which triggers body read + outgoing-letter write + target archive. Claude hitting `reply --to to-codex/<codex-letter>` would effectively close Codex's inbox. Fix: after `readMessageByRelativePath` + `validateProjectScope`, look up `boundAgent`; if `targetMessage.to !== boundAgent` → throw `ClientError(64, "reply target bucket owned by <to>, cannot reply as <boundAgent>")`. Whole reply is rejected — no body read, no outgoing letter, no archive, no mark. Same-direction reply (normal case, `targetMessage.to === boundAgent`) proceeds unchanged and marks as before. |
 | 6 | `dashboard/server.js` — agent router `GET /messages` at `:215-233` | Replace `const toMark = [...toClaude, ...toCodex].filter(…pending)` with caller-inbox-only filter driven by `request.agentSession.agent`. Unknown role → skip marking. |
+| 7 | `scripts/mailbox-lib.mjs` at `:11-31`, `scripts/mailbox.mjs` at `:27-30`, `dashboard/server.js` at `:5-27` | **New in v3.** Env-based overrides for paths + port — per Codex round-2 blocker 3, fixture-based ACs require these values be overridable for the throwaway probe harness. Pattern: `const port = Number(process.env.PORT) \|\| 3003;` `const runtimeRoot = process.env.RUNTIME_ROOT ? path.resolve(process.env.RUNTIME_ROOT) : path.resolve(__dirname, "..", "mailbox-runtime");` `const mailboxRoot = process.env.MAILBOX_ROOT ? path.resolve(process.env.MAILBOX_ROOT) : defaultMailboxRoot;`. Backward-compatible: env vars absent → behaviour unchanged. |
 
 **Non-changes**:
 
@@ -45,7 +46,7 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 - Existing letters with potentially-false `received_at` — NOT rewritten. The mark is already in frontmatter; we have no reliable way to tell which are genuine vs. bogus, and rewriting history would break ordering and trust. The fix is forward-only.
 - Bucket-filter output when listing — `list --bucket to-codex` still shows Codex's pending messages (visibility preserved); it just stops marking them.
 
-**Total estimated touch**: 2 files + 3 new/refactored helper functions = ~80-120 LOC net (v2 scope expanded for reply fix + `resolveCallerSession` extraction). Single concern. Still within Rule #8 one-commit threshold.
+**Total estimated touch (v3)**: 3 files + 3 new/refactored helper functions + env-override scaffolding = ~130-170 LOC net. Codex confirmed round 1 «one commit fine once base-state clean»; we stay single-commit for Stage 6 code. Separate prerequisite chore commit for `.gitattributes` lands first — see §7.
 
 ## 3. Expected behaviour after fix
 
@@ -54,8 +55,8 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 | Claude runs `mailbox.mjs list --bucket all --project workflow` | All pending in `to-claude` + `to-codex` get `received_at` | Only `to-claude/*.md` pending get `received_at`; `to-codex/*.md` untouched |
 | Claude runs `mailbox.mjs list --bucket to-codex --project workflow` | `to-codex` pending get `received_at` | `to-codex` pending LISTED but NOT marked |
 | Codex runs the same list commands | Same problem mirrored | Only `to-codex` marks; `to-claude` untouched |
-| Claude runs `mailbox.mjs reply …` targeting a `to-claude` letter (normal case: replying to letter addressed to Claude) | Marks target (correct) | Same: `targetMessage.to === "claude" === boundAgent` → mark proceeds |
-| Claude runs `mailbox.mjs reply …` targeting a `to-codex` letter (edge case: Claude replying to a letter NOT addressed to Claude) | Marks target (BUG — stamps wrong-direction) | Reply proceeds, but `markMessageReceived` SKIPPED because `targetMessage.to !== boundAgent` |
+| Claude runs `mailbox.mjs reply …` targeting a `to-claude` letter (normal case) | Marks target + archives + writes outgoing | Same — all steps proceed; `boundAgent === "claude" === targetMessage.to` |
+| Claude runs `mailbox.mjs reply …` targeting a `to-codex` letter (wrong-direction — Claude replying to letter not addressed to Claude) | Marks target + archives target + writes outgoing letter (BUG — Claude silently closes Codex's inbox item) | **Rejected** with `ClientError(64, "reply target bucket owned by <to>, cannot reply as <boundAgent>")`. No state mutation. |
 | Dashboard `GET /api/messages` (non-agent) | No marking | No marking (unchanged) |
 | Dashboard `GET /api/agent/messages` with `session.agent=claude` | Marks both buckets | Marks only `to-claude` |
 | Dashboard `GET /api/agent/messages` with `session.agent=codex` | Marks both buckets | Marks only `to-codex` |
@@ -76,3 +77,7 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 ## 6. Connection to the broader mailbox-read discussion
 
 Separately (user 2026-04-23 thread): «as a tool-level thing — how to make Read tool not see the letter body?». My answer there was «real fix = separate body from metadata on disk». That's a bigger refactor (~200-300 LOC, 4+ files) and a different concern entirely. This Stage 6 fixes only the wrong-direction marking bug; it does NOT prevent filesystem `Read` of letter bodies. If you later decide to pursue the body-separation refactor, it layers cleanly on top of this fix.
+
+## 7. Prerequisite chore: `.gitattributes` LF normalization
+
+Codex's round-1 / round-2 observed dirty tree on `scripts/mailbox.mjs` + `dashboard/src/App.jsx` with empty `git diff -w --stat`. My side: `git status --short` clean. Mismatch is cross-client CRLF behaviour — Codex's git checkout likely has different `core.autocrlf` from my Windows Git Bash setup. Fix once and for all: add `.gitattributes` declaring `eol=lf` for source files + `git add --renormalize .` to normalize all tracked files. Lands as a **separate commit BEFORE** the Stage 6 code commit. One-line rollback via `git revert` if ever needed. Scope of that chore is strictly repo-hygiene; does not touch any behaviour.

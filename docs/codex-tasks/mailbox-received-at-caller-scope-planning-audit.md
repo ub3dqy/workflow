@@ -25,7 +25,7 @@ Any CRLF/whitespace churn that appears after git-attribute normalisation is trac
 
 - `scripts/mailbox-lib.mjs:604-626` — `markMessageReceived(filePath)` reads YAML frontmatter via `gray-matter`, returns early if `"received_at" in parsed.data`, otherwise writes `received_at = toUtcTimestamp()` via atomic `.tmp` + `fs.rename`. Idempotent. No caller context.
 - `scripts/mailbox.mjs:215-223` — call site inside `handleList`; loops over `filtered` messages, marks every pending `to-claude` or `to-codex` entry. No caller-agent check.
-- `scripts/mailbox.mjs:281` — call site inside `handleReply`; marks the reply target. Caller = replier by construction, so semantics are correct here (the replier has read the message they're replying to). No change needed.
+- `scripts/mailbox.mjs:274-303` — `handleReply`: reads target via `readMessageByRelativePath` (accepts any in-project to-claude/* or to-codex/* path — Codex round-2 blocker 2), calls `markMessageReceived(location)` unconditionally, reads body, writes outgoing reply via `sendMessage`, archives the target. **Scope change from v1:** wrong-direction caller (e.g., Claude invoking reply with a `to-codex/*` target) can silently archive Codex's inbox item. v3 rejects such reply with `ClientError(64)` before any filesystem mutation.
 - `dashboard/server.js:225-232` — agent-authenticated router `GET /messages`; marks every pending entry from both buckets after reading them. `request.agentSession.agent` is already populated by the session-auth middleware at `:196-212` but is never consulted during the mark loop.
 - `dashboard/server.js:/api/messages` (non-agent, `:47-70`) — no marking. Dashboard polling is safe and unaffected.
 - `scripts/supervisor.mjs` — does not call `markMessageReceived`. Supervisor only derives a fallback `received_at` for its `pendingIndex` output (derived field, distinct from raw frontmatter).
@@ -146,15 +146,20 @@ for (const msg of filtered) {
 
 Import added to the top-of-file destructure: `resolveCallerAgent`.
 
-### 2.3 `scripts/mailbox.mjs` — `handleReply` caller-scope mark (Codex blocker 2)
+### 2.3 `scripts/mailbox.mjs` — `handleReply` reject wrong-direction (Codex blocker 2, v3 tightening)
 
-Before (current, lines ~274-282):
+v2 attempted «skip mark, let reply proceed». Codex round-2 correctly flagged that as incomplete — the reply flow also archives the target and writes an outgoing letter, so even without marking, a cross-direction caller can still close foreign inbox items. v3 rejects wrong-direction reply entirely, BEFORE any state mutation.
+
+Before (current, lines ~274-303):
 
 ```js
 const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot, { project: boundProject });
 validateProjectScope(explicitProject, targetMessage);
 const location = path.resolve(mailboxRoot, targetMessage.relativePath);
 await markMessageReceived(location);
+const body = await readBody(options);
+const to = getReplyTargetForMessage(targetMessage, from);
+// … sendMessage + archiveMessage …
 ```
 
 After:
@@ -162,15 +167,56 @@ After:
 ```js
 const targetMessage = await readMessageByRelativePath(options.to, mailboxRoot, { project: boundProject });
 validateProjectScope(explicitProject, targetMessage);
-const location = path.resolve(mailboxRoot, targetMessage.relativePath);
+
 const boundAgent = await resolveCallerAgent({ cwd: process.cwd(), runtimeRoot });
-if (boundAgent && targetMessage.to === boundAgent) {
-  await markMessageReceived(location);
+if (!boundAgent) {
+  throw new ClientError(64, "reply requires a bound session (claude or codex) for current cwd");
 }
-// else: reply still proceeds (writes the outgoing letter), but the WRONG-direction target is NOT stamped.
+if (targetMessage.to !== boundAgent) {
+  throw new ClientError(
+    64,
+    `reply target bucket owned by "${targetMessage.to}"; cannot reply as "${boundAgent}"`
+  );
+}
+
+const location = path.resolve(mailboxRoot, targetMessage.relativePath);
+await markMessageReceived(location);
+const body = await readBody(options);
+const to = getReplyTargetForMessage(targetMessage, from);
+// … sendMessage + archiveMessage (unchanged) …
 ```
 
-The rest of `handleReply` (body read, outgoing-letter write via `sendMessage`) is unchanged.
+Reject happens BEFORE any filesystem mutation — no partial state. Rest of `handleReply` unchanged for the same-direction case.
+
+### 2.4 `dashboard/server.js` — agent `GET /messages` fix (unchanged from v2)
+
+_(See v2 audit; same logic: filter `toMark` by `session.agent`, unknown role → skip.)_
+
+### 2.5 Env-based overrides for mailboxRoot / runtimeRoot / port (Codex blocker 3, v3 new)
+
+Required so the fixture harness can run a throwaway server + CLI child-process against disposable roots. Codex round-2 correctly flagged that the current code hard-codes these.
+
+`scripts/mailbox-lib.mjs:11,31` — replace constants:
+
+```js
+const port = Number(process.env.PORT) || 3003;
+const defaultMailboxRoot = process.env.MAILBOX_ROOT
+  ? path.resolve(process.env.MAILBOX_ROOT)
+  : path.resolve(__dirname, "..", "agent-mailbox");
+```
+
+`scripts/mailbox.mjs:27-30` — mirror:
+
+```js
+const runtimeRoot = process.env.RUNTIME_ROOT
+  ? path.resolve(process.env.RUNTIME_ROOT)
+  : path.resolve(__dirname, "..", "mailbox-runtime");
+const mailboxRoot = defaultMailboxRoot; // already env-aware via lib
+```
+
+`dashboard/server.js:5-27` — same pattern for `mailboxRoot` + `runtimeRoot` + `port`.
+
+Behaviour: env vars unset → defaults unchanged (backward compatible). Env vars set → fully overridable. Fixture probes set `MAILBOX_ROOT`, `RUNTIME_ROOT`, `PORT` before spawning server / CLI child processes.
 
 ### 2.4 `dashboard/server.js` — agent `GET /messages` fix
 
@@ -211,7 +257,7 @@ All CLI / server ACs below use **disposable fixture data** so the real `workflow
 - **Helper / handleList / handleReply unit tests**: the probe script `import`s from the repo's `scripts/mailbox-lib.mjs` and `scripts/mailbox.mjs`, passing explicit `runtimeRoot` + `mailboxRoot` to the helpers and calling their internal logic. No live CLI invocation.
 - **Server-side ACs**: run a **throwaway** `node dashboard/server.js` instance on port **3013** (not prod `3003`) using env `PORT=3013 MAILBOX_ROOT=<fix>/mailbox RUNTIME_ROOT=<fix>/runtime`. Wait for readiness via `curl 127.0.0.1:3013/api/messages?project=fx` → 200. Run probes. Shut down with SIGTERM.
 - **Cleanup (AC-20)**: `rm -rf E:/tmp/stage6-probe-*` at probe-script exit (always, even on failure via `finally`).
-- **Post-exec smoke against real mailbox**: happens AFTER Codex work-verification, NOT as part of ACs. It's a separate user-initiated check on `workflow` mailbox after commit + push.
+- **AC-17 is NOT live-mailbox smoke**: it restarts the existing prod dev-server process (on port 3003) and hits `curl /api/messages` → 200 to catch import/syntax regressions that `npx vite build` can't. No test letters written to real mailbox, no `received_at` stamped on real files. Dev-server restart takes ~1-2 s and is a pragmatic sanity-check layer. Full end-to-end smoke with real letters (e.g., sending a test message from Claude to verify the fix hits the wire) is a separate user-driven check AFTER Codex work-verification, not gated by ACs.
 
 ### 3.1 ACs
 
@@ -225,13 +271,13 @@ All CLI / server ACs below use **disposable fixture data** so the real `workflow
 | AC-6 | `resolveCallerProject` refactor preserves observable behaviour | Fixture probe: same inputs as AC-2; run once against baseline (`git stash` of changes) and once against revised code; compare return. | Identical output |
 | AC-7 | Fixture `handleList`: Claude caller does NOT mark `to-codex` pending | Session `{agent:"claude", project:"fx"}`; pending letter in `<fix>/mailbox/to-codex/fx__*.md` with no `received_at`; invoke `handleList` logic directly (not via CLI). Inspect letter frontmatter post-call. | `received_at` STILL absent |
 | AC-8 | Fixture `handleList`: Claude caller DOES mark `to-claude` pending | Same fixture; pending letter in `<fix>/mailbox/to-claude/fx__*.md` with no `received_at`. | `received_at` present after call |
-| AC-9 | Fixture `handleReply`: reply target matches caller inbox → stamp | Pending `to-claude` letter; `boundAgent = "claude"` → `targetMessage.to = "claude"` → mark proceeds. | Target `received_at` set |
-| AC-10 | Fixture `handleReply`: reply target in opposite bucket → DO NOT stamp | Pending `to-codex` letter; `boundAgent = "claude"` → `targetMessage.to = "codex"` ≠ `boundAgent` → skip mark, but outgoing reply letter MUST still be written. | Outgoing reply letter present in fixture; target `received_at` STILL absent |
-| AC-11 | Server `GET /api/agent/messages` with `session.agent:"claude"` marks only `to-claude` | Throwaway server on port 3013 + fixture; register fixture claude-session; seed 1 pending letter in each of `to-claude/` + `to-codex/`; HTTP call to endpoint with `x-session-id`. Inspect both letters post-call. | `to-claude` stamped; `to-codex` NOT stamped |
+| AC-9 | Fixture `handleReply`: reply target matches caller inbox → full flow succeeds (v3 behaviour unchanged) | Pending `to-claude` letter; `boundAgent = "claude"`; invoke reply → outgoing letter written, target archived, `received_at` stamped. | All three state mutations observed; no ClientError |
+| AC-10 | Fixture `handleReply`: wrong-direction target → **rejected** (v3 tightening per Codex round-2 blocker 2) | Pending `to-codex` letter with `to: "codex"`; `boundAgent = "claude"`; invoke reply. | Throws `ClientError(64)` with message containing `"reply target bucket owned by \"codex\"; cannot reply as \"claude\""`. Target frontmatter untouched (no `received_at`, no `status: archived`). No outgoing letter in `to-codex/` or `to-claude/`. |
+| AC-11 | Server `GET /api/agent/messages` with `session.agent:"claude"` marks only `to-claude` | Throwaway server on port 3013 + fixture; register fixture claude-session with known `session_id`; seed 1 pending letter in each of `to-claude/` + `to-codex/`; `curl "http://127.0.0.1:3013/api/agent/messages?project=fx&session_id=<id>"` (auth middleware at `server.js:186-205` takes session_id as QUERY PARAM, not header — Codex round-2 finding 4). Inspect both letters post-call. | `to-claude` stamped; `to-codex` NOT stamped |
 | AC-12 | Server: mirror with `session.agent:"codex"` marks only `to-codex` | Same fixture, switch session's `agent` to `"codex"`, restart throwaway server. | `to-codex` stamped; `to-claude` NOT stamped |
 | AC-13 | Server: unknown `session.agent` skips marking entirely | Session `{agent:"gpt", …}`; repeat AC-11 shape. | Both buckets untouched |
 | AC-14 | Server `GET /api/messages` (non-agent) does not mark anything | `curl 127.0.0.1:3013/api/messages?project=fx` with seeded pending letters; inspect post-call. | Neither bucket stamped |
-| AC-15 | Post-exec diff scope sane | Real-repo `git diff --stat` post-code-exec | Only `scripts/mailbox.mjs`, `scripts/mailbox-lib.mjs`, `dashboard/server.js`. ~80-120 LOC net. |
+| AC-15 | Post-exec diff scope sane | Real-repo `git diff --stat` post-code-exec | Only `scripts/mailbox.mjs`, `scripts/mailbox-lib.mjs`, `dashboard/server.js`. ~130-170 LOC net (v3 scope includes env overrides + reply reject). |
 | AC-16 | `npx vite build` clean | `cd dashboard && npx vite build` | Pass |
 | AC-17 | Prod dev-server (port 3003) restart succeeds post-exec | Kill + `npm run dev` restart; `curl 127.0.0.1:3003/api/messages` → 200; vite log shows no import / syntax error. | Pass |
 | AC-18 | No new deps | `git diff --stat package.json dashboard/package.json` post-exec | 0 lines |
@@ -249,8 +295,8 @@ Not anchoring — Codex forms ≥3 independent risks per Rule #7. Candidates:
 1. **Agent detection false negative (stale sessions)**: if `sessions.json` contains an expired entry whose cwd still matches, `resolveCallerAgent` returns the stale `agent`. Mitigation options: (a) accept — same risk already in `resolveCallerProject`; (b) narrow by `last_seen` cutoff. v2 plan does NOT add cutoff; inherits the existing behaviour.
 2. **Case-sensitivity edge on Linux (non-WSL)**: `resolveCallerSession` will mirror `resolveCallerProject`'s `.toLowerCase()` cwd match. Case-sensitive fs → different-case cwd treated as match here. Pre-existing; not worsened.
 3. **Race: list + simultaneous send**: `markMessageReceived` is idempotent (skips if `received_at` set), so no double-stamp. Sub-second race between send and recipient-side list still possible — acceptable as pre-existing behaviour.
-4. **handleList inner-logic invocation in fixture**: `scripts/mailbox.mjs` is a CLI entry point that wires `process.argv` + process.exit. Fixture probes need to either (a) invoke the `handleList` function directly (if exported) or (b) call the CLI as a child_process with env overrides. If (a) is not available without a refactor, v2 defaults to (b) via `child_process.spawn("node", ["scripts/mailbox.mjs", "list", …], { env: { ...process.env, MAILBOX_ROOT: fix, RUNTIME_ROOT: fix } })` — this works ONLY if mailbox.mjs and mailbox-lib.mjs honor those env vars (grep suggests yes — current paths use `mailboxRoot` + `runtimeRoot` passed in, resolved from module-level constants read from process). Codex please confirm that env-override path is viable or flag if a small refactor is needed to expose internals for test injection.
-5. **Reply path scope change**: v2 now adds the mark-scope guard to `handleReply`. Edge-case worth flagging: if a Claude caller replies to a letter they themselves SENT (i.e. target is in `to-codex` with `from: claude`, which is semantically «I'm replying to myself»), reply proceeds but target not stamped. That's the correct fix, but the UX is «replied but letter remains pending» — visible in dashboard as «unread» still. Confirm that's intended.
+4. **Fixture invocation via env overrides**: resolved in v3 by §2.5 scaffolding — `MAILBOX_ROOT`, `RUNTIME_ROOT`, `PORT` env vars now honored across `mailbox-lib.mjs`, `mailbox.mjs`, `dashboard/server.js`. Fixture probes spawn child processes / HTTP clients with the env vars set; defaults unchanged when env absent.
+5. **Reply reject vs. pass-through (v3 tightening)**: v2 planned «skip mark, reply proceeds»; Codex round-2 correctly flagged this still lets a caller archive a foreign inbox item. v3 rejects wrong-direction reply with `ClientError(64)` before any state mutation. Edge case: a caller with no bound session at all → same error as current «reply requires bound session» path, no change needed there.
 6. **Server restart + prod port**: AC-17 tests prod port 3003 restart. If user is actively reading dashboard at time of exec, that restart drops their browser connection for ~1-2 s. Not destructive, but worth noting before exec starts.
 7. **Rule #8 size**: ~80-120 LOC net (v2 scope). Still single commit. If Codex prefers a split — (a) helper extraction + `resolveCallerAgent`, (b) call-sites — say so.
 
