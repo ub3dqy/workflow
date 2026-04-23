@@ -9,7 +9,7 @@ const requireFromDashboard = createRequire(
 const matter = requireFromDashboard("gray-matter");
 
 export const host = "127.0.0.1";
-export const port = 3003;
+export const port = Number(process.env.PORT) || 3003;
 export const knownBuckets = ["to-claude", "to-codex", "archive"];
 export const bucketConfig = {
   "to-claude": { key: "toClaude", recursive: false },
@@ -28,7 +28,9 @@ const allowedArchiveResolutions = new Set([
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const defaultMailboxRoot = path.resolve(__dirname, "../agent-mailbox");
+export const defaultMailboxRoot = process.env.MAILBOX_ROOT
+  ? path.resolve(process.env.MAILBOX_ROOT)
+  : path.resolve(__dirname, "../agent-mailbox");
 
 export function toHostPath(rawCwd) {
   if (typeof rawCwd !== "string") return "";
@@ -54,7 +56,12 @@ export function toHostPath(rawCwd) {
   return trimmed;
 }
 
-export async function resolveCallerProject({ cwd, runtimeRoot }) {
+function sanitizeAgent(value) {
+  const nextAgent = sanitizeString(value).toLowerCase();
+  return nextAgent === "claude" || nextAgent === "codex" ? nextAgent : "";
+}
+
+async function resolveCallerSession({ cwd, runtimeRoot }) {
   const sessionsPath = path.join(runtimeRoot, "sessions.json");
   let raw;
 
@@ -62,7 +69,7 @@ export async function resolveCallerProject({ cwd, runtimeRoot }) {
     raw = await fs.readFile(sessionsPath, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") {
-      return "";
+      return null;
     }
     throw error;
   }
@@ -71,16 +78,16 @@ export async function resolveCallerProject({ cwd, runtimeRoot }) {
   try {
     list = JSON.parse(raw);
   } catch {
-    return "";
+    return null;
   }
 
   if (!Array.isArray(list)) {
-    return "";
+    return null;
   }
 
   const targetHost = toHostPath(cwd);
   if (!targetHost) {
-    return "";
+    return null;
   }
 
   const targetNormalized = path.normalize(targetHost).replace(/[\\/]+$/, "");
@@ -107,16 +114,26 @@ export async function resolveCallerProject({ cwd, runtimeRoot }) {
     const entryFolded = caseFold(entryNormalized);
 
     if (targetFolded === entryFolded) {
-      return normalizeProject(entry.project) || "";
+      return entry;
     }
 
     const separator = entryFolded.includes("\\") ? "\\" : "/";
     if (targetFolded.startsWith(entryFolded + separator)) {
-      return normalizeProject(entry.project) || "";
+      return entry;
     }
   }
 
-  return "";
+  return null;
+}
+
+export async function resolveCallerProject({ cwd, runtimeRoot }) {
+  const entry = await resolveCallerSession({ cwd, runtimeRoot });
+  return normalizeProject(entry?.project) || "";
+}
+
+export async function resolveCallerAgent({ cwd, runtimeRoot }) {
+  const entry = await resolveCallerSession({ cwd, runtimeRoot });
+  return sanitizeAgent(entry?.agent);
 }
 
 export class ClientError extends Error {

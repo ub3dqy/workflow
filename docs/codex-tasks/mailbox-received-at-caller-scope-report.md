@@ -1,87 +1,198 @@
-# mailbox-received-at-caller-scope — Execution report (template, pre-exec)
+# mailbox-received-at-caller-scope — Execution report
 
-**Stage**: 6. **Commit**: TBD (landed after Codex greenlights the v4 planning package).
-**Branch**: `master` → `origin/master` via explicit user `комит и пуш` command (Rule #11).
-**Executor**: Claude. **Report mode**: template scaffolded pre-exec per Codex round-3 blocker 2; filled post-exec with real probe output.
+**Stage**: 6. **Commit**: published in git history as the Stage 6 ship commit.
+**Base HEAD**: `a5821af`.
+**Branch**: `master`.
+**Executor**: Codex (direct user override on 2026-04-23 because Claude hit limits).
+**Report mode**: post-exec.
 
 ---
 
 ## 0. Status
 
-**Pre-exec**: all sections below are placeholders. Filled during Stage 6 execution on top of the approved planning package (current base: commit `e334c55` + v5 docs revision — `git log` on master for the latest `docs(codex-tasks): Stage 6 v<N>` commit is the authoritative approved base).
+Stage 6 code is implemented in the working tree and matches the v6 package scope across the planned 3 code files.
 
-Sections will be populated in this order when exec begins:
+Verification completed with:
 
-1. §1 — `git show <stage-6-sha> --stat` (from real commit).
-2. §2 — file-by-file role (3 files: `scripts/mailbox-lib.mjs`, `scripts/mailbox.mjs`, `dashboard/server.js`).
-3. §3 — probe raw output (V1..V11 aligned with ACs).
-4. §4 — AC status table (AC-1..AC-20 per planning-audit §3.1).
-5. §5 — known unknowns actually discovered during exec.
-6. §6 — rollback if material defect surfaces.
+1. `node --check` on `scripts/mailbox-lib.mjs`, `scripts/mailbox.mjs`, `dashboard/server.js`
+2. disposable fixture probes for helper lookup, CLI `list`, CLI `reply`, agent HTTP path, non-agent HTTP path
+3. `cd dashboard && npx vite build`
+4. CI-aligned PD scan from `.github/workflows/ci.yml`
+5. safe real-root runtime smoke on port `3015` via non-agent `/api/messages`
+
+I did **not** restart the active local dev server on port `3003`; see §5.
 
 ## 1. git diff --stat
 
-*TBD: captured at exec-time from `git show <stage-6-sha> --stat`.*
+```text
+ dashboard/server.js     | 11 +++++++++--
+ scripts/mailbox-lib.mjs | 37 +++++++++++++++++++++++++++----------
+ scripts/mailbox.mjs     | 31 ++++++++++++++++++++++++++++---
+ 3 files changed, 64 insertions(+), 15 deletions(-)
+```
 
 ## 2. File-by-file role
 
-*TBD: 3-row table — `scripts/mailbox-lib.mjs` (new `resolveCallerSession` internal, refactored `resolveCallerProject` thin wrapper, new `resolveCallerAgent` export, env-aware `port` + `defaultMailboxRoot`), `scripts/mailbox.mjs` (env-aware `runtimeRoot`, `handleList` caller-scope, `handleReply` reject wrong-direction), `dashboard/server.js` (env-aware `mailboxRoot`/`runtimeRoot`/`port`, `/api/agent/messages` caller-scope).*
+- `scripts/mailbox-lib.mjs`
+  Extracted internal `resolveCallerSession({ cwd, runtimeRoot })`, kept `resolveCallerProject(...)` as a thin wrapper, added `resolveCallerAgent(...)`, and made `port` / `defaultMailboxRoot` env-aware.
+- `scripts/mailbox.mjs`
+  Made `runtimeRoot` env-aware, restricted `handleList` marking to the caller-owned inbox only, and rejected wrong-direction `reply` before any state mutation.
+- `dashboard/server.js`
+  Made `runtimeRoot` env-aware and restricted `/api/agent/messages` marking to the session agent's own inbox only.
 
-## 3. Probes (raw output)
+## 3. Probes
 
-All probes run post-exec from the `tmp-probe-stage6.mjs` driver (see planning-audit §3.0) and the live dev-server. Each block captures literal stdout/stderr, not a summary.
+### V1 — metadata
 
-### V1 — commit metadata
-*TBD*
+```text
+HEAD=a5821af
+commit_created=pending-at-report-write
+```
 
 ### V2 — helper shape (AC-1)
-*TBD — shows `typeof resolveCallerAgent === "function"` and `typeof resolveCallerSession === "undefined"`.*
 
-### V3 — helper-lookup matrix (AC-2..AC-5)
-*TBD — 4 invocations, 4 expected returns.*
+```text
+typeof resolveCallerAgent = function
+resolveCallerSession exported = false
+```
+
+### V3 — helper lookup matrix (AC-2..AC-5)
+
+```text
+AC2 => claude
+AC3 => codex
+AC4 => ""
+AC5 => ""
+```
 
 ### V4 — `resolveCallerProject` equivalence (AC-6)
-*TBD — known-input known-output assertion.*
 
-### V5 — CLI `list` fixture: Claude does not mark `to-codex` (AC-7)
-*TBD — spawnSync raw output + post-call frontmatter dump.*
+```text
+AC6 => fx
+```
 
-### V6 — CLI `list` fixture: Claude marks `to-claude` (AC-8)
-*TBD — same shape, opposite bucket.*
+### V5 — CLI `list` fixture (AC-7 + AC-8)
 
-### V7 — CLI `reply` same-direction full flow (AC-9)
-*TBD — spawnSync + archive check + outgoing-letter check.*
+```text
+status=0
+toClaudeReceived=true
+toCodexReceived=false
+```
 
-### V8 — CLI `reply` wrong-direction reject (AC-10)
-*TBD — spawnSync exit 64 + stderr pattern match + zero-mutation frontmatter dump.*
+### V6 — CLI `reply` same-direction (AC-9)
 
-### V9 — server agent-messages per agent role (AC-11..AC-13)
-*TBD — 3 HTTP calls with 3 fixture sessions.*
+```text
+status=0
+targetArchived=true
+outgoingToCodex=true
+originalStillInInbox=0
+stdout=to-codex/fx__2026-04-23T16-49-22Z-reply-ok-claude-001.md
+archive/reply-ok/fx__2026-04-23T16-49-20Z-reply-ok-codex-001.md
+```
 
-### V10 — non-agent server path no-mark (AC-14)
-*TBD — HTTP call, post-call frontmatter dump.*
+### V7 — CLI `reply` wrong-direction reject (AC-10)
 
-### V11 — vite build + prod server restart (AC-16 + AC-17)
-*TBD — `npx vite build` output + `npm run dev` restart + `curl /api/messages` 200.*
+```text
+status=64
+stderr=reply target bucket owned by "codex"; cannot reply as "claude"
+receivedBefore=false
+receivedAfter=false
+archiveCount=0
+toCodexCount=1
+toClaudeCount=0
+```
+
+### V8 — server agent-messages (AC-11 + AC-12)
+
+```text
+AC11 register=claude => toClaudeReceived=true, toCodexReceived=false
+AC12 register=codex  => toClaudeReceived=false, toCodexReceived=true
+```
+
+### V9 — server unknown-agent path (AC-13)
+
+```text
+POST /api/runtime/sessions with agent=gpt => {"error":"agent must be claude or codex"}
+GET /api/agent/messages with that session_id => {"error":"session not found"}
+frontmatter after call => toClaudeReceived=false, toCodexReceived=false
+```
+
+Note: the defensive `[]` branch in `dashboard/server.js` remains in place, but the public supervisor registration API rejects unknown agents before such a session can exist in live state.
+
+### V10 — non-agent server path (AC-14)
+
+```text
+status=0
+toClaudeReceived=false
+toCodexReceived=false
+```
+
+### V11 — build + safe real-root runtime smoke
+
+```text
+$ cd dashboard && npx vite build
+vite v8.0.8 building client environment for production...
+transforming...✓ 17 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.39 kB | gzip:  0.27 kB
+dist/assets/index-DPEQBa0Y.js  272.41 kB | gzip: 82.60 kB
+✓ built in 1.90s
+```
+
+```text
+PORT=3015 node dashboard/server.js
+Server listening on 127.0.0.1:3015
+GET /api/messages?project=workflow => {toClaude: 1, toCodex: 0, archive: 339, projects: 4}
+```
 
 ### V12 — PD scan (AC-19)
-*TBD — CI parity grep, exit 1.*
+
+```text
+PD scan clean
+```
 
 ### V13 — fixture cleanup (AC-20)
-*TBD — `ls E:/tmp/stage6-probe-*` → absent.*
+
+```text
+/tmp/stage6-probe-* => absent
+```
 
 ## 4. Acceptance Criteria status
 
-*TBD: table mirrors planning-audit §3.1. Each row: AC id, description (brief), probe ref, ☑/☒ with timestamp + probe section ref.*
+| AC | Status | Evidence |
+|---|---|---|
+| AC-1 | PASS | V2 |
+| AC-2 | PASS | V3 |
+| AC-3 | PASS | V3 |
+| AC-4 | PASS | V3 |
+| AC-5 | PASS | V3 |
+| AC-6 | PASS | V4 |
+| AC-7 | PASS | V5 |
+| AC-8 | PASS | V5 |
+| AC-9 | PASS | V6 |
+| AC-10 | PASS | V7 |
+| AC-11 | PASS | V8 |
+| AC-12 | PASS | V8 |
+| AC-13 | N/A | public runtime API rejects unknown agents before `agentRouter`; defensive branch preserved, zero-mark behavior still observed in failed-registration probe (V9) |
+| AC-14 | PASS | V10 |
+| AC-15 | PASS | §1 |
+| AC-16 | PASS | V11 |
+| AC-17 | MODIFIED PASS | safe-equivalent real-root smoke on port `3015`; exact port `3003` restart skipped to avoid interrupting an active local dev process |
+| AC-18 | PASS | no `package.json` / `dashboard/package.json` diff |
+| AC-19 | PASS | V12 |
+| AC-20 | PASS | V13 |
 
-## 5. Known unknowns (filled post-exec)
+## 5. Known unknowns
 
-*TBD — anything that surfaced during exec but didn't fit any AC: timing quirks, environment-specific notes, leftover doubts.*
+1. The precise planning-audit AC-13 route is not runtime-reachable through the public supervisor API because `/api/runtime/sessions` rejects agents other than `claude` / `codex`. The defensive `[]` branch still remains correct and harmless.
+2. The exact planning-audit AC-17 step said to restart the live port `3003` dev server. I intentionally used a safe equivalent on port `3015` because a `node server.js` process was already active locally and killing it would have disrupted user work.
+3. Repository-level `scripts/quality.ps1` and `scripts/security.ps1` do not exist in this checkout, so that deploy gate could not be run verbatim.
 
-## 6. Rollback (invoked only if §4 shows a PASS→FAIL later)
+## 6. Rollback
 
-*TBD or N/A. If the post-push smoke reveals a defect, `git revert <stage-6-sha>` is the single-commit recovery; push requires explicit user command.*
+No commit exists yet. Rollback is local working-tree discard of the 3 code files or, if later committed, `git revert <stage-6-code-sha>`.
 
-## 7. Handoff to Codex
+## 7. Handoff
 
-This report file, once filled, + the updated mailbox letter referencing the exec SHA, go to Codex in the same thread. Codex authors `docs/codex-tasks/mailbox-received-at-caller-scope-work-verification.md` as the closing artifact.
+Codex executed and verified this block in one pass because the user explicitly overrode the normal Claude-exec / Codex-verify split for this turn.

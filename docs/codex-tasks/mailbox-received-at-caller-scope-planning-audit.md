@@ -1,23 +1,27 @@
 # mailbox-received-at-caller-scope — Planning audit
 
 **Stage**: 6. **Brief**: `docs/codex-tasks/mailbox-received-at-caller-scope.md`.
-**Base commit**: v5 (this) rebases on top of v4 commit `e334c55`; prerequisite chore `fea959e` (`.gitattributes`) already landed. Exec starts from whatever HEAD is at the moment v5 is approved (expected: `e334c55` + the v5 docs commit).
+**Base commit**: v6 (this) rebases on top of v5 commit `a5821af`; prerequisite chore `fea959e` (`.gitattributes`) already landed. Exec starts from whatever HEAD is at the moment v6 is approved (expected: `a5821af` + the v6 docs commit).
 **Audit mode**: pre-exec — this package goes to Codex BEFORE any code change.
-**Revision history**: v1 → v2 → v3 → v4 → v5 (this). See brief §8 for per-round summary. v5 applies Codex round-4 findings: absolute SCRIPT path for CLI-child-process probes (fix for non-existent `scripts/mailbox.mjs` relative to fixture cwd), duplicate §2.4 resolved (env-overrides is now §2.4, server.js fix is §2.5), stale base-ref in report template unpinned, brief version/scope labels bumped to v5.
+**Revision history**: v1 → v2 → v3 → v4 → v5 → v6 (this). See brief §8 for per-round summary. v6 applies Codex round-5 findings: AC-6 vs §3.0 helper-import contradiction closed (driver imports both `resolveCallerProject` and `resolveCallerAgent`); §3/§5 headings and Risk #7 stripped of v4 labels; §1.0 base-state language moved to path-scoped; brief version bumped to 6; report template base-ref re-pinned to v5 `a5821af`.
 
 ---
 
 ## 1.0 Base-state check
 
+Before code execution begins, confirm the Stage-6 working surface is clean — **path-scoped, not globally clean**:
+
 ```
 $ git rev-parse HEAD
-<HEAD before v2 docs commit>
+<current HEAD on master — expected: a5821af + the approved v6 docs commit>
 
-$ git status --short
+$ git status --short -- scripts/mailbox-lib.mjs scripts/mailbox.mjs dashboard/server.js docs/codex-tasks/
 <clean>
 ```
 
-Any CRLF/whitespace churn that appears after git-attribute normalisation is tracked down and committed OR discarded BEFORE code execution; the execution report will include a fresh `git status --short` + `git diff --stat` captured at the moment the code changes begin.
+Stage-6 exec surface is only `scripts/mailbox-lib.mjs`, `scripts/mailbox.mjs`, `dashboard/server.js`, and `docs/codex-tasks/*`. Unrelated user work in other paths (e.g. an untracked `docs/mailbox-agent-onboarding.md`) is out of scope and does not block execution.
+
+Any CRLF/whitespace churn inside Stage-6 paths that appears after git-attribute normalisation is tracked down and committed OR discarded BEFORE code execution; the execution report will include a fresh `git status --short -- <stage-6-paths>` + `git diff --stat -- <stage-6-paths>` captured at the moment the code changes begin.
 
 ## 1. Pre-exec research
 
@@ -243,15 +247,15 @@ await Promise.all(toMark.map(m => markMessageReceived(path.resolve(mailboxRoot, 
 
 No other changes to the endpoint (response shape, archive retrieval, session-mismatch middleware — all unchanged).
 
-## 3. Acceptance Criteria (v4 — CLI-child-process + HTTP, no direct-import)
+## 3. Acceptance Criteria
 
 ### 3.0 Test harness (Codex blockers 3 + round-3 re-blocker)
 
-All CLI / server ACs below use **disposable fixture data** so the real `workflow` mailbox and active `mailbox-runtime/sessions.json` stay intact. **Invocation is CLI-child-process or HTTP only** — v4 drops the direct-import of `handleList` / `handleReply` because they are NOT exported from `scripts/mailbox.mjs` (Codex round-3 finding 1). All probes route through the existing external interfaces.
+All CLI / server ACs below use **disposable fixture data** so the real `workflow` mailbox and active `mailbox-runtime/sessions.json` stay intact. **Invocation is CLI-child-process or HTTP only** — direct-import of `handleList` / `handleReply` is not used because they are NOT exported from `scripts/mailbox.mjs` (Codex round-3 finding 1). All probes route through the existing external interfaces.
 
 - **Fixture root**: `E:/tmp/stage6-probe-<ISO>/` (outside repo) — contains `mailbox/to-claude/`, `mailbox/to-codex/`, `mailbox/archive/`, and `runtime/sessions.json`. Populated by a throwaway `tmp-probe-stage6.mjs` driver script at the start of each AC run.
 - **CLI probes (AC-7..10)**: the driver computes `SCRIPT = path.resolve(repoRoot, "scripts", "mailbox.mjs")` — **absolute** path, resolved from the repo root where the driver lives, NOT relative to the fixture cwd (the fixture has no `scripts/` tree). Invocation: `child_process.spawnSync("node", [SCRIPT, "list", "--bucket", "all", "--project", "fx"], { cwd: "<fix>/work", env: { ...process.env, MAILBOX_ROOT: "<fix>/mailbox", RUNTIME_ROOT: "<fix>/runtime" } })`. `cwd` stays at `<fix>/work` so that `resolveCallerProject` / `resolveCallerAgent` (which read `RUNTIME_ROOT/sessions.json` and match against `process.cwd()`) resolve via the fixture session entry. Same pattern for `reply`. After each invocation, the driver reads fixture frontmatter via `fs.readFileSync` + `gray-matter` and asserts expected `received_at` presence/absence, archive status, outgoing-letter existence, exit code, stderr text (for reject cases).
-- **Helper probes (AC-1..6)**: the driver imports ONLY `resolveCallerAgent` from `../scripts/mailbox-lib.mjs` (named export). `resolveCallerSession` is NOT imported — AC-1 confirms it via negative-test. No `handleList` / `handleReply` imports anywhere.
+- **Helper probes (AC-1..6)**: the driver imports `resolveCallerAgent` and `resolveCallerProject` from `../scripts/mailbox-lib.mjs` (named exports). `resolveCallerSession` is NOT imported — AC-1 confirms it via negative-test. No `handleList` / `handleReply` imports anywhere.
 - **Server-side ACs (AC-11..14)**: spawn throwaway `node dashboard/server.js` with env `PORT=3013 MAILBOX_ROOT=<fix>/mailbox RUNTIME_ROOT=<fix>/runtime`; wait for readiness via `curl 127.0.0.1:3013/api/messages?project=fx` → 200; run probes via `curl` (HTTP surface); shut down with SIGTERM; `await` child exit.
 - **Cleanup (AC-20)**: driver's `finally` block does `rm -rf E:/tmp/stage6-probe-*` and `kill -TERM` on any leftover child processes. Runs on both pass and fail paths.
 - **AC-17 scope**: restart the prod dev-server process on port 3003 (Ctrl-C current `npm run dev`, relaunch) + `curl /api/messages` → 200. Catches import/syntax regressions that `npx vite build` cannot (vite builds the client bundle only; the server.js + mailbox-lib.mjs live-run is separate). No test letters, no real frontmatter mutation. Full end-to-end smoke with real letters is user-driven AFTER work-verification and NOT an AC.
@@ -285,7 +289,7 @@ All CLI / server ACs below use **disposable fixture data** so the real `workflow
 
 Enumerated in §4 of brief. Notable items: no retroactive correction of bogus `received_at` values; no body/metadata separation refactor; no change to session binding format; no client-side UI change.
 
-## 5. Risks / adversarial bait for Codex (v4 — reply reject + env overrides + CLI-only probes)
+## 5. Risks / adversarial bait for Codex
 
 Not anchoring — Codex forms ≥3 independent risks per Rule #7. Candidates:
 
@@ -295,15 +299,14 @@ Not anchoring — Codex forms ≥3 independent risks per Rule #7. Candidates:
 4. **Fixture invocation via env overrides**: resolved in v3 by §2.5 scaffolding — `MAILBOX_ROOT`, `RUNTIME_ROOT`, `PORT` env vars now honored across `mailbox-lib.mjs`, `mailbox.mjs`, `dashboard/server.js`. Fixture probes spawn child processes / HTTP clients with the env vars set; defaults unchanged when env absent.
 5. **Reply reject vs. pass-through (v3 tightening)**: v2 planned «skip mark, reply proceeds»; Codex round-2 correctly flagged this still lets a caller archive a foreign inbox item. v3 rejects wrong-direction reply with `ClientError(64)` before any state mutation. Edge case: a caller with no bound session at all → same error as current «reply requires bound session» path, no change needed there.
 6. **Server restart + prod port**: AC-17 tests prod port 3003 restart. If user is actively reading dashboard at time of exec, that restart drops their browser connection for ~1-2 s. Not destructive, but worth noting before exec starts.
-7. **Rule #8 size (v4)**: ~130-170 LOC net (env overrides + reply reject + resolveCallerSession + caller-scope). Still one commit per Codex round-1 «one commit fine once base-state is clean». If you want splits at env-overrides / reply-reject / caller-scope boundaries — say so; clean cut points.
+7. **Rule #8 size**: ~130-170 LOC net (env overrides + reply reject + resolveCallerSession + caller-scope). Still one commit per Codex round-1 «one commit fine once base-state is clean». If you want splits at env-overrides / reply-reject / caller-scope boundaries — say so; clean cut points.
 
 ## 6. Rollback
 
 Multi-commit landing on master:
 
 - `fea959e` (prerequisite chore, `.gitattributes` + renormalization) — landed pre-v3 docs. Independent of Stage 6 code; leave in place on Stage-6 rollback (it's repo hygiene).
-- `f9a3cd1` (v3 docs) — `.md` artifacts only, zero code impact; no rollback needed.
-- `<v4 docs sha>` (this revision) — `.md` artifacts only; no rollback needed.
+- `f9a3cd1` (v3 docs), `e334c55` (v4 docs), `a5821af` (v5 docs), `<v6 docs sha>` (this revision) — `.md` artifacts only, zero code impact; no rollback needed.
 - `<stage-6-code sha>` (TBD, post-approval) — the actual code change; `git revert <that sha>` restores pre-Stage-6 behaviour of `mailbox-lib.mjs` / `mailbox.mjs` / `server.js`.
 
 Pushing any revert to `origin/master` requires an explicit user command per Rule #11. No data migration.

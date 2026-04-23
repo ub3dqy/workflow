@@ -1,12 +1,12 @@
 # mailbox-received-at-caller-scope — scope `received_at` marking to caller's inbox only
 
 **Stage**: 6 (independent — not in dashboard-perf roadmap)
-**Version**: 5 (see revision trail at bottom of file)
+**Version**: 6 (see revision trail at bottom of file)
 **Thread**: `mailbox-received-at-caller-scope`
 **Planning-audit**: `docs/codex-tasks/mailbox-received-at-caller-scope-planning-audit.md`
 **Execution report**: `docs/codex-tasks/mailbox-received-at-caller-scope-report.md` (TBD after exec)
 **Work-verification** (Codex, post-exec): `docs/codex-tasks/mailbox-received-at-caller-scope-work-verification.md` (TBD)
-**Depends on**: current `master` at the latest `docs(codex-tasks): Stage 6 v<N>` commit (v5 lands this revision on top of v4 `e334c55`). Prerequisite chore `fea959e` (`.gitattributes`) already on master. See `-planning-audit.md §1.0` for base-state probe run at exec-start.
+**Depends on**: current `master` at the latest `docs(codex-tasks): Stage 6 v<N>` commit (v6 lands this revision on top of v5 `a5821af`). Prerequisite chore `fea959e` (`.gitattributes`) already on master. See `-planning-audit.md §1.0` for base-state probe run at exec-start.
 **Executor**: Claude. **Verifier**: Codex.
 
 ---
@@ -92,4 +92,5 @@ Separately (user 2026-04-23 thread): «as a tool-level thing — how to make Rea
 - **v2** (commit `a11937a`): Codex round-1 fixes — base-SHA, `resolveCallerSession` extraction, fixture-based ACs attempt, reply-mark guard (too weak).
 - **v3** (commits `fea959e` + `f9a3cd1`): Codex round-2 fixes — `.gitattributes` LF normalization, reply `ClientError` rejection (not pass-through), env-override scaffolding, AC-11 auth shape fix.
 - **v4** (commit `e334c55`): Codex round-3 fixes — CLI-child-process-only AC invocation (helper-export dropped), `-report.md` template added, v1/v2 text sweep, rollback text matches actual multi-commit plan, AC-6 rewritten without `git stash`.
-- **v5** (this revision): Codex round-4 fixes — AC-7..10 CLI invocation uses absolute `SCRIPT` path instead of relative `scripts/mailbox.mjs` (the fixture cwd has no `scripts/` tree); report-template base-ref unpinned from `f9a3cd1`; Version label bumped to 5; duplicate `§2.4 dashboard/server.js` resolved (single §2.5 server.js, §2.4 env-overrides).
+- **v5** (commit `a5821af`): Codex round-4 fixes — AC-7..10 CLI invocation uses absolute `SCRIPT` path instead of relative `scripts/mailbox.mjs` (the fixture cwd has no `scripts/` tree); report-template base-ref unpinned from `f9a3cd1`; Version label bumped to 5; duplicate `§2.4 dashboard/server.js` resolved (single §2.5 server.js, §2.4 env-overrides).
+- **v6** (this revision): Codex round-5 fixes — AC-6 vs §3.0 helper-import contradiction resolved (driver imports both `resolveCallerProject` and `resolveCallerAgent`); v4 labels removed from §3/§5 headings and Risk #7; report template base-ref re-pinned to v5 `a5821af`; §1.0 switched to path-scoped baseline language (unrelated user-work files outside Stage-6 paths do not block execution).

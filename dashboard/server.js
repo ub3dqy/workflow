@@ -24,7 +24,9 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const mailboxRoot = defaultMailboxRoot;
-const runtimeRoot = path.resolve(__dirname, "..", "mailbox-runtime");
+const runtimeRoot = process.env.RUNTIME_ROOT
+  ? path.resolve(process.env.RUNTIME_ROOT)
+  : path.resolve(__dirname, "..", "mailbox-runtime");
 const app = express();
 
 app.use((request, response, next) => {
@@ -222,7 +224,12 @@ agentRouter.get("/messages", async (request, response) => {
     const toClaude = filterMessagesByProject(allToClaude, request.agentProject);
     const toCodex = filterMessagesByProject(allToCodex, request.agentProject);
     const archive = filterMessagesByProject(allArchive, request.agentProject);
-    const toMark = [...toClaude, ...toCodex].filter(
+    const callerInbox = request.agentSession.agent === "claude"
+      ? toClaude
+      : request.agentSession.agent === "codex"
+        ? toCodex
+        : [];
+    const toMark = callerInbox.filter(
       (message) => message.status === "pending"
     );
     await Promise.all(

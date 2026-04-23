@@ -15,6 +15,7 @@ import {
   normalizePath,
   readMessageByRelativePath,
   recoverOrphans,
+  resolveCallerAgent,
   resolveCallerProject,
   sanitizeString,
   threadExists,
@@ -24,10 +25,12 @@ import {
   validateThread
 } from "./mailbox-lib.mjs";
 
-const mailboxRoot = defaultMailboxRoot;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const runtimeRoot = path.resolve(__dirname, "../mailbox-runtime");
+const mailboxRoot = defaultMailboxRoot;
+const runtimeRoot = process.env.RUNTIME_ROOT
+  ? path.resolve(process.env.RUNTIME_ROOT)
+  : path.resolve(__dirname, "../mailbox-runtime");
 const knownCommands = new Set(["send", "list", "reply", "archive", "recover"]);
 
 function parseCommand(argv) {
@@ -205,6 +208,11 @@ async function handleList(args) {
       `session bound to "${boundProject}", refusing list for project "${project}"`
     );
   }
+  const boundAgent = await resolveCallerAgent({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  const callerBucket = boundAgent ? `to-${boundAgent}` : "";
   const messages = await collectMailboxMessages(mailboxRoot, { project });
   const filteredByBucket =
     bucket === "all"
@@ -215,7 +223,8 @@ async function handleList(args) {
   for (const msg of filtered) {
     if (
       msg.status === "pending" &&
-      (msg.bucket === "to-claude" || msg.bucket === "to-codex")
+      callerBucket &&
+      msg.bucket === callerBucket
     ) {
       const abs = path.resolve(mailboxRoot, msg.relativePath);
       await markMessageReceived(abs);
@@ -277,6 +286,22 @@ async function handleReply(args) {
     { project: boundProject }
   );
   validateProjectScope(explicitProject, targetMessage);
+  const boundAgent = await resolveCallerAgent({
+    cwd: process.cwd(),
+    runtimeRoot
+  });
+  if (!boundAgent) {
+    throw new ClientError(
+      64,
+      "reply requires a bound session (claude or codex) for current cwd"
+    );
+  }
+  if (targetMessage.to !== boundAgent) {
+    throw new ClientError(
+      64,
+      `reply target bucket owned by "${targetMessage.to}"; cannot reply as "${boundAgent}"`
+    );
+  }
   const location = path.resolve(mailboxRoot, targetMessage.relativePath);
   await markMessageReceived(location);
   const body = await readBody(options);
