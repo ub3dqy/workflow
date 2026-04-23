@@ -1,12 +1,12 @@
 # mailbox-received-at-caller-scope — scope `received_at` marking to caller's inbox only
 
 **Stage**: 6 (independent — not in dashboard-perf roadmap)
-**Version**: 3 (see revision trail at bottom of file)
+**Version**: 5 (see revision trail at bottom of file)
 **Thread**: `mailbox-received-at-caller-scope`
 **Planning-audit**: `docs/codex-tasks/mailbox-received-at-caller-scope-planning-audit.md`
 **Execution report**: `docs/codex-tasks/mailbox-received-at-caller-scope-report.md` (TBD after exec)
 **Work-verification** (Codex, post-exec): `docs/codex-tasks/mailbox-received-at-caller-scope-work-verification.md` (TBD)
-**Depends on**: current `master` at `f9a3cd1` (v3 landed). Prerequisite chore `fea959e` (`.gitattributes`) on top of v2 base `a11937a`. See `-planning-audit.md §1.0` for base-state probe run at exec-start.
+**Depends on**: current `master` at the latest `docs(codex-tasks): Stage 6 v<N>` commit (v5 lands this revision on top of v4 `e334c55`). Prerequisite chore `fea959e` (`.gitattributes`) already on master. See `-planning-audit.md §1.0` for base-state probe run at exec-start.
 **Executor**: Claude. **Verifier**: Codex.
 
 ---
@@ -46,7 +46,7 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 - Existing letters with potentially-false `received_at` — NOT rewritten. The mark is already in frontmatter; we have no reliable way to tell which are genuine vs. bogus, and rewriting history would break ordering and trust. The fix is forward-only.
 - Bucket-filter output when listing — `list --bucket to-codex` still shows Codex's pending messages (visibility preserved); it just stops marking them.
 
-**Total estimated touch (v3)**: 3 files + 3 new/refactored helper functions + env-override scaffolding = ~130-170 LOC net. Codex confirmed round 1 «one commit fine once base-state clean»; we stay single-commit for Stage 6 code. Separate prerequisite chore commit for `.gitattributes` lands first — see §7.
+**Total estimated touch**: 3 files + 3 new/refactored helper functions + env-override scaffolding = ~130-170 LOC net. Codex confirmed round 1 «one commit fine once base-state clean»; we stay single-commit for Stage 6 code. Separate prerequisite chore commit for `.gitattributes` already landed — see §7.
 
 ## 3. Expected behaviour after fix
 
@@ -91,4 +91,5 @@ Separately (user 2026-04-23 thread): «as a tool-level thing — how to make Rea
 - **v1** (commits `6c347e5`): initial package. Under-scoped reply path; hard-coded test plan.
 - **v2** (commit `a11937a`): Codex round-1 fixes — base-SHA, `resolveCallerSession` extraction, fixture-based ACs attempt, reply-mark guard (too weak).
 - **v3** (commits `fea959e` + `f9a3cd1`): Codex round-2 fixes — `.gitattributes` LF normalization, reply `ClientError` rejection (not pass-through), env-override scaffolding, AC-11 auth shape fix.
-- **v4** (this revision): Codex round-3 fixes — CLI-child-process-only AC invocation (helper-export dropped), `-report.md` template added, v1/v2 text sweep, rollback text matches actual multi-commit plan, AC-6 rewritten without `git stash`.
+- **v4** (commit `e334c55`): Codex round-3 fixes — CLI-child-process-only AC invocation (helper-export dropped), `-report.md` template added, v1/v2 text sweep, rollback text matches actual multi-commit plan, AC-6 rewritten without `git stash`.
+- **v5** (this revision): Codex round-4 fixes — AC-7..10 CLI invocation uses absolute `SCRIPT` path instead of relative `scripts/mailbox.mjs` (the fixture cwd has no `scripts/` tree); report-template base-ref unpinned from `f9a3cd1`; Version label bumped to 5; duplicate `§2.4 dashboard/server.js` resolved (single §2.5 server.js, §2.4 env-overrides).

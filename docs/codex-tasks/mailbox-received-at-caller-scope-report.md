@@ -8,7 +8,7 @@
 
 ## 0. Status
 
-**Pre-exec**: all sections below are placeholders. Filled during Stage 6 execution on top of approved planning-audit v4 (`f9a3cd1` or later).
+**Pre-exec**: all sections below are placeholders. Filled during Stage 6 execution on top of the approved planning package (current base: commit `e334c55` + v5 docs revision — `git log` on master for the latest `docs(codex-tasks): Stage 6 v<N>` commit is the authoritative approved base).
 
 Sections will be populated in this order when exec begins:
 
