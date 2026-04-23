@@ -1,12 +1,12 @@
 # mailbox-received-at-caller-scope — scope `received_at` marking to caller's inbox only
 
 **Stage**: 6 (independent — not in dashboard-perf roadmap)
-**Version**: 1
+**Version**: 3 (see revision trail at bottom of file)
 **Thread**: `mailbox-received-at-caller-scope`
 **Planning-audit**: `docs/codex-tasks/mailbox-received-at-caller-scope-planning-audit.md`
 **Execution report**: `docs/codex-tasks/mailbox-received-at-caller-scope-report.md` (TBD after exec)
 **Work-verification** (Codex, post-exec): `docs/codex-tasks/mailbox-received-at-caller-scope-work-verification.md` (TBD)
-**Depends on**: current `master` at the Stage-6 docs-landing commit (`6c347e5` for v1; this v2 revision lands as a follow-up commit on top of it — see revised base in `-planning-audit.md §1.0`).
+**Depends on**: current `master` at `f9a3cd1` (v3 landed). Prerequisite chore `fea959e` (`.gitattributes`) on top of v2 base `a11937a`. See `-planning-audit.md §1.0` for base-state probe run at exec-start.
 **Executor**: Claude. **Verifier**: Codex.
 
 ---
@@ -72,7 +72,11 @@ Fix goal: `received_at` stamps only when the recipient agent actually listed/pol
 
 ## 5. Rollback
 
-`git revert <stage-6-commit>` locally. Pushing the revert requires an explicit user command per Rule #11 — not implied by this document. Revert is a single commit touching 2 code files; it restores the over-eager marking. No data migration to undo.
+The Stage 6 code commit is a single commit touching 3 files (`scripts/mailbox-lib.mjs`, `scripts/mailbox.mjs`, `dashboard/server.js`). `git revert <stage-6-sha>` locally reverts just that commit and restores the over-eager marking + permissive wrong-direction reply.
+
+The prerequisite chore `fea959e` (`.gitattributes` + renormalization) is intentionally LEFT in place on rollback — the LF-normalization is repo hygiene, independent of Stage 6. If a full return to the pre-prerequisite state is required for an unrelated reason, a separate `git revert fea959e` also lands.
+
+Pushing either revert to `origin/master` requires an explicit user command per Rule #11 — not implied by this document. No data migration to undo.
 
 ## 6. Connection to the broader mailbox-read discussion
 
@@ -80,4 +84,11 @@ Separately (user 2026-04-23 thread): «as a tool-level thing — how to make Rea
 
 ## 7. Prerequisite chore: `.gitattributes` LF normalization
 
-Codex's round-1 / round-2 observed dirty tree on `scripts/mailbox.mjs` + `dashboard/src/App.jsx` with empty `git diff -w --stat`. My side: `git status --short` clean. Mismatch is cross-client CRLF behaviour — Codex's git checkout likely has different `core.autocrlf` from my Windows Git Bash setup. Fix once and for all: add `.gitattributes` declaring `eol=lf` for source files + `git add --renormalize .` to normalize all tracked files. Lands as a **separate commit BEFORE** the Stage 6 code commit. One-line rollback via `git revert` if ever needed. Scope of that chore is strictly repo-hygiene; does not touch any behaviour.
+**Landed** as commit `fea959e` on `master` (pre-v3 docs). Adds `.gitattributes` with `* text=auto eol=lf` + explicit binary markers; `git add --renormalize .` touched only the 2 v3 docs themselves (other tracked files already LF). Removes the cross-client CRLF dirty-tree perception Codex saw on rounds 1-2. Independent of Stage 6 code; not reverted on Stage-6 rollback.
+
+## 8. Revision trail
+
+- **v1** (commits `6c347e5`): initial package. Under-scoped reply path; hard-coded test plan.
+- **v2** (commit `a11937a`): Codex round-1 fixes — base-SHA, `resolveCallerSession` extraction, fixture-based ACs attempt, reply-mark guard (too weak).
+- **v3** (commits `fea959e` + `f9a3cd1`): Codex round-2 fixes — `.gitattributes` LF normalization, reply `ClientError` rejection (not pass-through), env-override scaffolding, AC-11 auth shape fix.
+- **v4** (this revision): Codex round-3 fixes — CLI-child-process-only AC invocation (helper-export dropped), `-report.md` template added, v1/v2 text sweep, rollback text matches actual multi-commit plan, AC-6 rewritten without `git stash`.
