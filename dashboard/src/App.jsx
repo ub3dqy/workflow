@@ -2,9 +2,14 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { marked } from "marked";
 import {
   archiveMessage,
+  fetchCodexBridge,
   fetchMessages,
+  fetchCodexTransport,
   fetchRuntimeState,
-  postNote
+  forceStopCodexTransport,
+  postNote,
+  startCodexTransport,
+  shutdownWorkflow
 } from "./api.js";
 
 marked.use({ breaks: true, gfm: true });
@@ -17,6 +22,7 @@ const emptyData = {
 };
 const supportedLanguages = new Set(["ru", "en"]);
 const supportedThemes = new Set(["light", "dark", "auto"]);
+const CODEX_FORCE_STOP_CONFIRMATION = "disconnect-codex-remote-sessions";
 const translations = {
   ru: {
     eyebrow: "Локальный дашборд mailbox",
@@ -83,7 +89,26 @@ const translations = {
     pendingIndexTitle: "Незабранные сообщения",
     noPendingMessages: "Нет pending-сообщений.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Последний цикл"
+    supervisorLastTick: "Последний цикл",
+    closeWorkflow: "Закрыть workflow",
+    closingWorkflow: "Закрытие...",
+    closeWorkflowConfirm:
+      "Закрыть dashboard? Codex transport и открытые Codex --remote сессии останутся работать.",
+    shutdownNotice: "Workflow завершает работу. Эту страницу можно закрыть.",
+    codexTransportTitle: "Codex transport",
+    codexTransportHelp:
+      "Dashboard стартует и проверяет transport, сохраняя открытые Codex --remote сессии при закрытии или перезапуске dashboard.",
+    codexTransportState: "Статус",
+    codexBridgeState: "Bridge",
+    codexBridgeDeliveries: "Записи доставки",
+    codexBridgeBlocked: "Блокировка",
+    codexStart: "Старт",
+    codexForceStop: "Force stop",
+    codexForceStopPrompt:
+      "Это отключит все открытые Codex --remote сессии. Введите STOP для подтверждения.",
+    codexLastReady: "Готов",
+    codexLastTick: "Bridge tick",
+    codexLastError: "Ошибка"
   },
   en: {
     eyebrow: "Local mailbox dashboard",
@@ -151,7 +176,26 @@ const translations = {
     pendingIndexTitle: "Undelivered messages",
     noPendingMessages: "No pending messages.",
     supervisorHealthLabel: "Supervisor",
-    supervisorLastTick: "Last tick"
+    supervisorLastTick: "Last tick",
+    closeWorkflow: "Close workflow",
+    closingWorkflow: "Closing...",
+    closeWorkflowConfirm:
+      "Close the dashboard? Codex transport and open Codex --remote sessions will keep running.",
+    shutdownNotice: "Workflow is shutting down. You can close this page.",
+    codexTransportTitle: "Codex transport",
+    codexTransportHelp:
+      "The dashboard starts and health-checks the transport while preserving open Codex --remote sessions across dashboard close or restart.",
+    codexTransportState: "State",
+    codexBridgeState: "Bridge",
+    codexBridgeDeliveries: "Delivery records",
+    codexBridgeBlocked: "Blocked",
+    codexStart: "Start",
+    codexForceStop: "Force stop",
+    codexForceStopPrompt:
+      "This disconnects every open Codex --remote session. Type STOP to confirm.",
+    codexLastReady: "Ready",
+    codexLastTick: "Bridge tick",
+    codexLastError: "Error"
   }
 };
 
@@ -235,11 +279,17 @@ const styles = `
     --button-send-bg: #8c4f2a;
     --button-send-text: #fff6eb;
     --button-send-shadow: 0 12px 24px rgba(91, 51, 26, 0.14);
+    --button-danger-bg: #8e4736;
+    --button-danger-text: #fff3ee;
+    --button-danger-shadow: 0 12px 24px rgba(107, 46, 31, 0.18);
     --button-archive-bg: #e8ded0;
     --button-archive-text: #46392b;
     --button-archive-border: inset 0 0 0 1px rgba(61, 45, 25, 0.08);
     --button-outline-text: #5e4c37;
     --button-outline-border: inset 0 0 0 1px rgba(61, 45, 25, 0.14);
+    --surface-info: rgba(232, 245, 238, 0.92);
+    --border-info: rgba(47, 90, 81, 0.18);
+    --text-info: #214a42;
     --shadow-stat: 0 12px 30px rgba(73, 56, 34, 0.08);
     --shadow-column: 0 18px 40px rgba(73, 56, 34, 0.1);
     --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -285,11 +335,17 @@ const styles = `
     --button-send-bg: #a56035;
     --button-send-text: #fff6eb;
     --button-send-shadow: 0 12px 24px rgba(0, 0, 0, 0.26);
+    --button-danger-bg: #a85b48;
+    --button-danger-text: #fff2ed;
+    --button-danger-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
     --button-archive-bg: #4a4035;
     --button-archive-text: #f0e3cf;
     --button-archive-border: inset 0 0 0 1px rgba(200, 180, 150, 0.12);
     --button-outline-text: #d6c5ad;
     --button-outline-border: inset 0 0 0 1px rgba(200, 180, 150, 0.16);
+    --surface-info: rgba(35, 60, 53, 0.92);
+    --border-info: rgba(132, 176, 159, 0.22);
+    --text-info: #d7f1e8;
     --shadow-stat: 0 12px 30px rgba(0, 0, 0, 0.22);
     --shadow-column: 0 18px 40px rgba(0, 0, 0, 0.28);
     --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -427,6 +483,7 @@ const styles = `
 
   .langButton,
   .soundButton,
+  .dangerButton,
   .projectSelect {
     border: 0;
     border-radius: 999px;
@@ -447,6 +504,12 @@ const styles = `
     box-shadow: var(--button-outline-border);
   }
 
+  .dangerButton {
+    background: var(--button-danger-bg);
+    color: var(--button-danger-text);
+    box-shadow: var(--button-danger-shadow);
+  }
+
   .soundButton {
     padding: 10px 14px;
     font-size: 18px;
@@ -464,12 +527,14 @@ const styles = `
 
   .langButton:hover,
   .soundButton:hover,
+  .dangerButton:hover,
   .projectSelect:hover {
     transform: translateY(-1px);
   }
 
   .langButton:disabled,
   .soundButton:disabled,
+  .dangerButton:disabled,
   .projectSelect:disabled {
     cursor: progress;
     pointer-events: none;
@@ -519,6 +584,15 @@ const styles = `
     border: 1px solid var(--border-error);
     background: var(--surface-error);
     color: var(--text-error);
+  }
+
+  .infoBanner {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border-info);
+    background: var(--surface-info);
+    color: var(--text-info);
   }
 
   .emptyState {
@@ -575,7 +649,7 @@ const styles = `
 
   .runtimePanel {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
     margin: 0 0 24px;
     padding: 16px;
@@ -606,6 +680,48 @@ const styles = `
     align-items: center;
     gap: 8px;
     font-size: 12px;
+  }
+
+  .runtimeMeta {
+    margin: 0 0 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .statusPill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: var(--surface-chip);
+    color: var(--chip-text);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .statusPill--ready {
+    background: var(--surface-control-active);
+    color: var(--button-primary-text);
+  }
+
+  .transportActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 12px;
+  }
+
+  .transportHelp {
+    margin: 10px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
   }
 
   .supervisorFooter {
@@ -997,6 +1113,12 @@ const styles = `
     box-shadow: var(--button-outline-border);
   }
 
+  .cardButton--danger {
+    background: var(--button-danger-bg);
+    color: var(--button-danger-text);
+    box-shadow: var(--button-danger-shadow);
+  }
+
   .replyForm {
     display: grid;
     gap: 12px;
@@ -1247,6 +1369,9 @@ function MessageCard({
     }
   };
 
+  // Unread state must come from raw frontmatter. `message.received_at` is a
+  // display fallback (`received_at ?? created`) and would incorrectly hide the
+  // dot for read-only probes / legacy messages.
   const showUnreadDot = !isArchived && !message.metadata?.received_at;
 
   return (
@@ -1426,6 +1551,24 @@ export default function App() {
   const [theme, setTheme] = useState(() =>
     getStoredValue("mailbox-theme", "auto", supportedThemes)
   );
+  const [isShuttingDown, setIsShuttingDown] = useState(false);
+  const [shutdownNotice, setShutdownNotice] = useState("");
+  const [codexTransportState, setCodexTransportState] = useState({
+    state: "stopped",
+    ready: false,
+    wsUrl: "",
+    lastReadyAt: null,
+    lastError: ""
+  });
+  const [codexBridgeState, setCodexBridgeState] = useState({
+    health: {
+      state: "stopped",
+      lastTickAt: null,
+      lastError: ""
+    },
+    deliveries: []
+  });
+  const [codexTransportAction, setCodexTransportAction] = useState("");
   const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
     getSystemPrefersDark()
   );
@@ -1492,6 +1635,11 @@ export default function App() {
   }, [project]);
 
   useEffect(() => {
+    if (isShuttingDown) {
+      runtimeAbortRef.current?.abort();
+      return undefined;
+    }
+
     async function load() {
       // Abort any in-flight runtime-state fetch before starting a new one.
       if (runtimeAbortRef.current && !runtimeAbortRef.current.signal.aborted) {
@@ -1502,18 +1650,45 @@ export default function App() {
       const localId = ++runtimeReqIdRef.current;
 
       try {
-        const data = await fetchRuntimeState({ signal: controller.signal });
+        const [runtimeResult, bridgeResult, transportResult] =
+          await Promise.allSettled([
+            fetchRuntimeState({ signal: controller.signal }),
+            fetchCodexBridge({ signal: controller.signal }),
+            fetchCodexTransport({ signal: controller.signal })
+          ]);
         if (localId !== runtimeReqIdRef.current) return; // stale-drop
-        setRuntimeState({
-          activeSessions: Array.isArray(data.activeSessions)
-            ? data.activeSessions
-            : [],
-          pendingIndex: Array.isArray(data.pendingIndex) ? data.pendingIndex : [],
-          supervisorHealth: data.supervisorHealth || {
-            lastTickAt: null,
-            tickErrors: 0
-          }
-        });
+
+        if (runtimeResult.status === "fulfilled") {
+          const data = runtimeResult.value;
+          setRuntimeState({
+            activeSessions: Array.isArray(data.activeSessions)
+              ? data.activeSessions
+              : [],
+            pendingIndex: Array.isArray(data.pendingIndex) ? data.pendingIndex : [],
+            supervisorHealth: data.supervisorHealth || {
+              lastTickAt: null,
+              tickErrors: 0
+            }
+          });
+        }
+
+        if (bridgeResult.status === "fulfilled") {
+          const bridge = bridgeResult.value;
+          setCodexBridgeState({
+            health: bridge.health || {
+              state: "stopped",
+              lastTickAt: null,
+              lastError: ""
+            },
+            deliveries: Array.isArray(bridge.deliveries)
+              ? bridge.deliveries
+              : []
+          });
+        }
+
+        if (transportResult.status === "fulfilled") {
+          setCodexTransportState(transportResult.value);
+        }
       } catch (loadError) {
         if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
           // Runtime visibility is non-fatal for the main dashboard.
@@ -1528,7 +1703,7 @@ export default function App() {
       runtimeAbortRef.current?.abort();
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [isShuttingDown]);
 
   useEffect(() => {
     try {
@@ -1631,6 +1806,10 @@ export default function App() {
 
   const refreshMessages = useEffectEvent(
     async ({ background = false } = {}) => {
+      if (isShuttingDown) {
+        return;
+      }
+
       // Shared overlap guard: abort in-flight fetch (if any) before starting
       // a new one; monotonic request id drops a stale response that resolves
       // after a newer call has started. Every call site — timer ticks,
@@ -1706,6 +1885,11 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (isShuttingDown) {
+      messagesAbortRef.current?.abort();
+      return undefined;
+    }
+
     // Project change → re-mount of this effect → cleanup aborts any
     // in-flight fetch (via messagesAbortRef) before the fresh effect
     // starts the initial fetch for the new project.
@@ -1722,7 +1906,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // refreshMessages is a useEffectEvent (stable identity by design); including it в deps
     // causes infinite re-mount loop если React's useEffectEvent identity isn't perfectly stable.
-  }, [project]);
+  }, [isShuttingDown, project]);
 
   const openNote = useEffectEvent((message) => {
     setError("");
@@ -1741,6 +1925,80 @@ export default function App() {
 
   const toggleLanguage = useEffectEvent(() => {
     setLang((currentLang) => (currentLang === "ru" ? "en" : "ru"));
+  });
+
+  const closeWorkflow = useEffectEvent(async () => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(t.closeWorkflowConfirm);
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    messagesAbortRef.current?.abort();
+    runtimeAbortRef.current?.abort();
+    setError("");
+    setShutdownNotice("");
+    setIsShuttingDown(true);
+
+    try {
+      await shutdownWorkflow();
+      setShutdownNotice(t.shutdownNotice);
+    } catch (shutdownError) {
+      setIsShuttingDown(false);
+      setError(
+        shutdownError instanceof Error ? shutdownError.message : String(shutdownError)
+      );
+    }
+  });
+
+  const controlCodexTransport = useEffectEvent(async (action) => {
+    if (codexTransportAction || isShuttingDown) {
+      return;
+    }
+
+    const actions = {
+      start: startCodexTransport,
+      "force-stop": () => forceStopCodexTransport(CODEX_FORCE_STOP_CONFIRMATION)
+    };
+    const runAction = actions[action];
+    if (!runAction) {
+      return;
+    }
+
+    if (action === "force-stop" && typeof window !== "undefined") {
+      const confirmed = window.prompt(t.codexForceStopPrompt);
+      if (confirmed !== "STOP") {
+        return;
+      }
+    }
+
+    setCodexTransportAction(action);
+    setError("");
+
+    try {
+      const nextTransportState = await runAction();
+      setCodexTransportState(nextTransportState);
+      const bridge = await fetchCodexBridge();
+      setCodexBridgeState({
+        health: bridge.health || {
+          state: "stopped",
+          lastTickAt: null,
+          lastError: ""
+        },
+        deliveries: Array.isArray(bridge.deliveries) ? bridge.deliveries : []
+      });
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : String(actionError)
+      );
+    } finally {
+      setCodexTransportAction("");
+    }
   });
 
   const archiveInboxMessage = useEffectEvent(async (message) => {
@@ -1877,6 +2135,17 @@ export default function App() {
                     {soundEnabled ? "🔊" : "🔇"}
                   </button>
 
+                  <button
+                    className="dangerButton"
+                    disabled={isShuttingDown}
+                    onClick={() => {
+                      closeWorkflow();
+                    }}
+                    type="button"
+                  >
+                    {isShuttingDown ? t.closingWorkflow : t.closeWorkflow}
+                  </button>
+
                   <div
                     aria-label={t.themeGroupLabel}
                     className="segmentedControl"
@@ -1957,6 +2226,95 @@ export default function App() {
                 </ul>
               )}
             </div>
+            <div className="runtimeBlock">
+              <h2>{t.codexTransportTitle}</h2>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexTransportState}</span>
+                <span
+                  className={`statusPill${
+                    codexTransportState.ready ? " statusPill--ready" : ""
+                  }`}
+                >
+                  {codexTransportState.state || "unknown"}
+                </span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexBridgeState}</span>
+                <span
+                  className={`statusPill${
+                    codexBridgeState.health?.state === "idle" ? " statusPill--ready" : ""
+                  }`}
+                >
+                  {codexBridgeState.health?.state || "unknown"}
+                </span>
+              </p>
+              <div className="transportActions">
+                <button
+                  className="cardButton cardButton--primary"
+                  disabled={Boolean(codexTransportAction) || isShuttingDown}
+                  onClick={() => {
+                    controlCodexTransport("start");
+                  }}
+                  type="button"
+                >
+                  {codexTransportAction === "start" ? t.refreshing : t.codexStart}
+                </button>
+                <button
+                  className="cardButton cardButton--danger"
+                  disabled={Boolean(codexTransportAction) || isShuttingDown}
+                  onClick={() => {
+                    controlCodexTransport("force-stop");
+                  }}
+                  type="button"
+                >
+                  {codexTransportAction === "force-stop"
+                    ? t.refreshing
+                    : t.codexForceStop}
+                </button>
+              </div>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexBridgeDeliveries}</span>
+                <span className="mono">{codexBridgeState.deliveries.length}</span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexBridgeBlocked}</span>
+                <span className="mono">
+                  {codexBridgeState.health?.lastBlockedReason || "—"}
+                </span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexLastReady}</span>
+                <span className="timestamp">
+                  {codexTransportState.ready && codexTransportState.lastReadyAt
+                    ? formatTimestamp(codexTransportState.lastReadyAt, lang, t)
+                    : "—"}
+                </span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexLastTick}</span>
+                <span className="timestamp">
+                  {codexBridgeState.health?.lastTickAt
+                    ? formatTimestamp(codexBridgeState.health.lastTickAt, lang, t)
+                    : "—"}
+                </span>
+              </p>
+              {codexTransportState.wsUrl ? (
+                <p className="runtimeMeta">
+                  <span className="chip">WS</span>
+                  <span className="mono">{codexTransportState.wsUrl}</span>
+                </p>
+              ) : null}
+              {codexTransportState.lastError || codexBridgeState.health?.lastError ? (
+                <p className="runtimeMeta">
+                  <span className="chip">{t.codexLastError}</span>
+                  <span className="mono">
+                    {codexTransportState.lastError ||
+                      codexBridgeState.health?.lastError}
+                  </span>
+                </p>
+              ) : null}
+              <p className="transportHelp">{t.codexTransportHelp}</p>
+            </div>
             <p className="supervisorFooter">
               <strong>{t.supervisorHealthLabel}</strong>
               {" · "}
@@ -1966,6 +2324,10 @@ export default function App() {
                 : "—"}
             </p>
           </section>
+
+          {shutdownNotice ? (
+            <div className="infoBanner">{shutdownNotice}</div>
+          ) : null}
 
           {error ? (
             <div className="errorBanner">

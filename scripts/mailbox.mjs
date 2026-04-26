@@ -212,7 +212,25 @@ async function handleList(args) {
     cwd: process.cwd(),
     runtimeRoot
   });
-  const callerBucket = boundAgent ? `to-${boundAgent}` : "";
+  const explicitInboxBucket =
+    bucket === "to-claude" || bucket === "to-codex" ? bucket : "";
+  if (bucket === "all" && !boundAgent) {
+    throw new ClientError(
+      64,
+      'list --bucket all requires an unambiguous agent session; use --bucket "to-claude" or "to-codex"'
+    );
+  }
+  if (
+    explicitInboxBucket &&
+    boundAgent &&
+    explicitInboxBucket !== `to-${boundAgent}`
+  ) {
+    throw new ClientError(
+      64,
+      `list bucket owned by "${explicitInboxBucket.slice(3)}"; bound agent is "${boundAgent}"`
+    );
+  }
+  const callerBucket = explicitInboxBucket || (boundAgent ? `to-${boundAgent}` : "");
   const messages = await collectMailboxMessages(mailboxRoot, { project });
   const filteredByBucket =
     bucket === "all"
@@ -290,16 +308,16 @@ async function handleReply(args) {
     cwd: process.cwd(),
     runtimeRoot
   });
-  if (!boundAgent) {
+  if (boundAgent && boundAgent !== from) {
     throw new ClientError(
       64,
-      "reply requires a bound session (claude or codex) for current cwd"
+      `reply --from "${from}" conflicts with bound session agent "${boundAgent}"`
     );
   }
-  if (targetMessage.to !== boundAgent) {
+  if (targetMessage.to !== from) {
     throw new ClientError(
       64,
-      `reply target bucket owned by "${targetMessage.to}"; cannot reply as "${boundAgent}"`
+      `reply target bucket owned by "${targetMessage.to}"; cannot reply as "${from}"`
     );
   }
   const location = path.resolve(mailboxRoot, targetMessage.relativePath);

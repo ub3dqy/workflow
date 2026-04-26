@@ -61,7 +61,40 @@ function sanitizeAgent(value) {
   return nextAgent === "claude" || nextAgent === "codex" ? nextAgent : "";
 }
 
-async function resolveCallerSession({ cwd, runtimeRoot }) {
+function parseSessionTimestamp(value) {
+  const epoch = Date.parse(value);
+  return Number.isFinite(epoch) ? epoch : 0;
+}
+
+function compareSessionMatch(left, right) {
+  if (right.cwd.length !== left.cwd.length) {
+    return right.cwd.length - left.cwd.length;
+  }
+
+  return parseSessionTimestamp(right.last_seen) - parseSessionTimestamp(left.last_seen);
+}
+
+function detectAgentFromEnvironment(env = process.env) {
+  const explicit =
+    sanitizeAgent(env.MAILBOX_AGENT) ||
+    sanitizeAgent(env.AGENT_MAILBOX_AGENT);
+
+  if (explicit) {
+    return explicit;
+  }
+
+  if (sanitizeString(env.CODEX_THREAD_ID)) {
+    return "codex";
+  }
+
+  if (sanitizeString(env.CLAUDE_PROJECT_DIR)) {
+    return "claude";
+  }
+
+  return "";
+}
+
+async function resolveCallerSessions({ cwd, runtimeRoot }) {
   const sessionsPath = path.join(runtimeRoot, "sessions.json");
   let raw;
 
@@ -69,7 +102,7 @@ async function resolveCallerSession({ cwd, runtimeRoot }) {
     raw = await fs.readFile(sessionsPath, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") {
-      return null;
+      return [];
     }
     throw error;
   }
@@ -78,16 +111,16 @@ async function resolveCallerSession({ cwd, runtimeRoot }) {
   try {
     list = JSON.parse(raw);
   } catch {
-    return null;
+    return [];
   }
 
   if (!Array.isArray(list)) {
-    return null;
+    return [];
   }
 
   const targetHost = toHostPath(cwd);
   if (!targetHost) {
-    return null;
+    return [];
   }
 
   const targetNormalized = path.normalize(targetHost).replace(/[\\/]+$/, "");
@@ -99,6 +132,7 @@ async function resolveCallerSession({ cwd, runtimeRoot }) {
   // Windows even when WSL cwd casing differs. See Codex round-4 verification.
   const caseFold = (value) => value.toLowerCase();
   const targetFolded = caseFold(targetNormalized);
+  const matches = [];
 
   for (const entry of list) {
     if (!entry?.cwd) {
@@ -114,26 +148,54 @@ async function resolveCallerSession({ cwd, runtimeRoot }) {
     const entryFolded = caseFold(entryNormalized);
 
     if (targetFolded === entryFolded) {
-      return entry;
+      matches.push({
+        ...entry,
+        cwd: entryNormalized
+      });
+      continue;
     }
 
     const separator = entryFolded.includes("\\") ? "\\" : "/";
     if (targetFolded.startsWith(entryFolded + separator)) {
-      return entry;
+      matches.push({
+        ...entry,
+        cwd: entryNormalized
+      });
     }
   }
 
-  return null;
+  matches.sort(compareSessionMatch);
+  return matches;
 }
 
 export async function resolveCallerProject({ cwd, runtimeRoot }) {
-  const entry = await resolveCallerSession({ cwd, runtimeRoot });
+  const [entry] = await resolveCallerSessions({ cwd, runtimeRoot });
   return normalizeProject(entry?.project) || "";
 }
 
 export async function resolveCallerAgent({ cwd, runtimeRoot }) {
-  const entry = await resolveCallerSession({ cwd, runtimeRoot });
-  return sanitizeAgent(entry?.agent);
+  const matches = await resolveCallerSessions({ cwd, runtimeRoot });
+  const preferredAgent = detectAgentFromEnvironment();
+
+  if (preferredAgent) {
+    return matches.some(
+      (entry) => sanitizeAgent(entry.agent) === preferredAgent
+    )
+      ? preferredAgent
+      : "";
+  }
+
+  const agents = new Set(
+    matches
+      .map((entry) => sanitizeAgent(entry.agent))
+      .filter(Boolean)
+  );
+
+  if (agents.size !== 1) {
+    return "";
+  }
+
+  return Array.from(agents)[0];
 }
 
 export class ClientError extends Error {
@@ -544,6 +606,9 @@ export async function readMessage(filePath, bucketName, mailboxRoot) {
     resolution:
       typeof parsed.data.resolution === "string" ? parsed.data.resolution : "",
     created,
+    // Display-friendly normalized timestamp. This intentionally falls back to
+    // `created` for legacy/unread messages; callers that need unread truth must
+    // inspect raw frontmatter via `metadata.received_at`.
     received_at: toMessageTimestamp({
       data: { created: parsed.data.received_at ?? parsed.data.created }
     }),

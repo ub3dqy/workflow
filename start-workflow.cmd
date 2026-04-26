@@ -1,6 +1,15 @@
 @echo off
 setlocal enableextensions enabledelayedexpansion
 
+if /i "%~1"=="--hidden-relay" (
+  shift
+) else if /i "%~1"=="--visible" (
+  shift
+) else if /i not "%WORKFLOW_LAUNCH_VISIBLE%"=="1" (
+  wscript.exe //nologo "%~dp0start-workflow-hidden.vbs" "%~f0" --hidden-relay %*
+  exit /b %errorlevel%
+)
+
 cd /d "%~dp0dashboard"
 
 rem Skip npm install when package-lock.json matches snapshot from last install

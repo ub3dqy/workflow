@@ -162,6 +162,14 @@ Enforced in-repo as of read-isolation task (session + filename-prefix storage):
 - **Admin endpoints** (`/api/messages*`, `/api/archive`, `/api/notes`) remain multi-project by design — human admin surface via browser. They are explicitly **NOT part of the agent isolation guarantee**.
 - **Filesystem discipline**: agents MUST NOT read `agent-mailbox/` files directly (`Read`, `Bash cat`, `Grep` on mailbox paths). This is a discipline contract, not a code-level guard. Any agent that bypasses the CLI/API surface violates project isolation.
 
+## Dashboard unread semantics
+
+- Dashboard unread state is driven by the **raw** frontmatter field `received_at`.
+- In API payloads this means `message.metadata.received_at`; the UI unread dot and pending banner intentionally use that raw field.
+- The top-level `message.received_at` returned by `readMessage()` is a **display fallback** (`raw received_at ?? created`) so legacy and unread letters still have a printable timestamp.
+- Therefore a read-only library probe can show a populated top-level `received_at` even when the message is still unread. Do **not** use the derived top-level field as unread truth.
+- Canonical rule: unread truth = raw frontmatter; display timestamp = normalized fallback.
+
 ### Storage invariant
 
 Every message filename starts with `<project>__` (double-underscore separator). Enforced by `generateMessageFile` which prepends the normalized project and by `normalizeProject` which rejects slugs containing `__` with `ClientError(400, 'project slug must not contain "__" (filename-prefix separator)')`.

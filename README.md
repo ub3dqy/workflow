@@ -45,7 +45,7 @@ Important: most existing `docs/codex-tasks/*.md` files are historical archive fr
 
 ![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
 
-*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), light/dark themes, tab-title badge + favicon for pending count, and optional audio notification.*
+*Local dashboard showing pending messages grouped by recipient, with project filter, language toggle (RU/EN), light/dark themes, tab-title badge + favicon for pending count, and optional audio notification. Unread markers are driven by the raw mailbox frontmatter field `received_at`, not by the library's display fallback timestamp.*
 
 ---
 
@@ -81,6 +81,18 @@ start-workflow.cmd
 stop-workflow.cmd
 start-workflow-hidden.vbs
 ```
+
+### Start Codex Remote Sessions
+
+For Codex mailbox automation, start project sessions through the zero-touch remote launcher instead of raw `codex --remote`:
+
+```bash
+node scripts/codex-remote-project.mjs
+```
+
+The launcher ensures the dashboard backend and Codex app-server are ready, passes `-C "$PWD"`, and sends a short bootstrap prompt so the remote thread has an initial rollout before mailbox delivery starts.
+
+Raw `codex --remote ws://127.0.0.1:4501` is not the supported mailbox entry point: it can create a loaded thread with no rollout, so delivery will remain blocked until a manual first prompt is sent.
 
 ### Agent-side mailbox CLI
 

@@ -83,3 +83,55 @@ export async function fetchRuntimeState({ signal } = {}) {
 
   return parseJsonResponse(response, `Runtime API returned ${response.status}`);
 }
+
+export async function fetchCodexBridge({ signal } = {}) {
+  const response = await fetch("/api/runtime/codex-bridge", {
+    cache: "no-store",
+    signal
+  });
+
+  return parseJsonResponse(response, `Codex bridge API returned ${response.status}`);
+}
+
+export async function fetchCodexTransport({ signal } = {}) {
+  const response = await fetch("/api/runtime/codex-transport", {
+    cache: "no-store",
+    signal
+  });
+
+  return parseJsonResponse(response, `Codex transport API returned ${response.status}`);
+}
+
+async function postCodexTransport(action, body) {
+  const response = await fetch(`/api/runtime/codex-transport/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  return parseJsonResponse(
+    response,
+    `Codex transport ${action} API returned ${response.status}`
+  );
+}
+
+export function startCodexTransport() {
+  return postCodexTransport("start");
+}
+
+export function forceStopCodexTransport(confirm) {
+  return postCodexTransport("force-stop", { confirm });
+}
+
+export async function shutdownWorkflow() {
+  const response = await fetch("/api/runtime/shutdown", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+
+  return parseJsonResponse(response, `Shutdown API returned ${response.status}`);
+}

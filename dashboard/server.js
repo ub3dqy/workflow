@@ -1,6 +1,9 @@
 import express from "express";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createCodexAppServerManager } from "./codex-app-server-manager.mjs";
+import { createCodexBridge } from "./codex-bridge.mjs";
 import { createSupervisor } from "./supervisor.mjs";
 import {
   archiveMessageFile,
@@ -27,6 +30,10 @@ const mailboxRoot = defaultMailboxRoot;
 const runtimeRoot = process.env.RUNTIME_ROOT
   ? path.resolve(process.env.RUNTIME_ROOT)
   : path.resolve(__dirname, "..", "mailbox-runtime");
+const previewPort = Number(process.env.DASHBOARD_PREVIEW_PORT || 9119);
+const SESSION_STALE_MS = 60_000;
+const FORCE_EXIT_TIMEOUT_MS = 5000;
+const CODEX_FORCE_STOP_CONFIRMATION = "disconnect-codex-remote-sessions";
 const app = express();
 
 app.use((request, response, next) => {
@@ -34,6 +41,20 @@ app.use((request, response, next) => {
   next();
 });
 app.use(express.json());
+
+function scheduleWorkflowShutdown() {
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const child = spawn(
+    command,
+    ["--yes", "kill-port", String(port), String(previewPort)],
+    {
+      cwd: __dirname,
+      detached: true,
+      stdio: "ignore"
+    }
+  );
+  child.unref();
+}
 
 function sendClientError(response, error) {
   if (error instanceof ClientError) {
@@ -182,6 +203,48 @@ const supervisor = createSupervisor({
   pollIntervalMs: 3000,
   logger: console
 });
+const codexTransport = createCodexAppServerManager({
+  runtimeRoot,
+  cwd: path.resolve(__dirname, ".."),
+  logger: console
+});
+const codexBridge = createCodexBridge({
+  runtimeRoot,
+  getSupervisorSnapshot: () => ({
+    activeSessions: Array.from(supervisor.state.sessions.values()).filter(
+      (session) => Date.now() - Date.parse(session.last_seen) <= SESSION_STALE_MS
+    ),
+    pendingIndex: supervisor.state.pendingIndex,
+    supervisorHealth: supervisor.state.supervisorHealth
+  }),
+  getTransportStatus: () => codexTransport.refresh(),
+  logger: console
+});
+
+async function safeCodexTransportStatus() {
+  try {
+    return await codexTransport.refresh();
+  } catch (error) {
+    const transportError = error instanceof Error ? error.message : String(error);
+    return {
+      state: "unknown",
+      ready: false,
+      wsUrl: null,
+      lastError: transportError
+    };
+  }
+}
+
+async function sendCodexTransportLifecycleDisabled(response, action) {
+  const transportStatus = await safeCodexTransportStatus();
+  response.status(409).json({
+    error:
+      `Codex transport ${action} is disabled because it would disconnect open Codex --remote sessions.`,
+    code: "codex_transport_lifecycle_preserved",
+    codexTransportPreserved: true,
+    codexTransport: transportStatus
+  });
+}
 
 const agentRouter = express.Router();
 
@@ -275,7 +338,6 @@ agentRouter.get("/runtime/deliveries", (request, response) => {
     return;
   }
 
-  const SESSION_STALE_MS = 60_000;
   const isActive = Date.now() - Date.parse(session.last_seen) <= SESSION_STALE_MS;
   if (!isActive) {
     response.setHeader("Cache-Control", "no-store");
@@ -303,6 +365,70 @@ agentRouter.get("/runtime/deliveries", (request, response) => {
 
 app.use("/api/agent", agentRouter);
 
+app.get("/api/runtime/codex-bridge", async (request, response) => {
+  try {
+    response.json({
+      health: codexBridge.getHealth(),
+      deliveries: await codexBridge.readDeliveries()
+    });
+  } catch (error) {
+    response.status(500).json({
+      error: "Failed to read Codex bridge state",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+app.get("/api/runtime/codex-transport", async (request, response) => {
+  response.json(await codexTransport.refresh());
+});
+
+app.post("/api/runtime/codex-transport/start", async (request, response) => {
+  response.json(await codexTransport.start());
+});
+
+app.post("/api/runtime/codex-transport/stop", async (request, response) => {
+  await sendCodexTransportLifecycleDisabled(response, "stop");
+});
+
+app.post("/api/runtime/codex-transport/restart", async (request, response) => {
+  await sendCodexTransportLifecycleDisabled(response, "restart");
+});
+
+app.post("/api/runtime/codex-transport/force-stop", async (request, response) => {
+  if (request.body?.confirm !== CODEX_FORCE_STOP_CONFIRMATION) {
+    response.status(400).json({
+      error:
+        `Force stop requires confirm="${CODEX_FORCE_STOP_CONFIRMATION}" because it disconnects open Codex --remote sessions.`,
+      code: "codex_transport_force_stop_confirmation_required",
+      codexTransportPreserved: true,
+      codexTransport: await safeCodexTransportStatus()
+    });
+    return;
+  }
+
+  response.json({
+    ...(await codexTransport.stop()),
+    forceStopped: true
+  });
+});
+
+app.post("/api/runtime/shutdown", async (request, response) => {
+  const transportStatus = await safeCodexTransportStatus();
+
+  response.json({
+    ok: true,
+    shuttingDown: true,
+    ports: [port, previewPort],
+    codexTransportPreserved: true,
+    codexTransport: transportStatus
+  });
+
+  response.on("finish", () => {
+    setTimeout(scheduleWorkflowShutdown, 150);
+  });
+});
+
 app.use("/api/runtime", supervisor.router);
 
 await supervisor.start();
@@ -311,20 +437,35 @@ const server = app.listen(port, host, () => {
   console.log(`Server listening on ${host}:${port}`);
 });
 
-function shutdown(signal) {
+await codexBridge.start();
+
+let isShuttingDown = false;
+
+async function shutdown(signal) {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   process.stderr.write(`[server] ${signal} received, shutting down\n`);
+  const forceExitTimer = setTimeout(() => {
+    process.stderr.write("[server] force exit after 5s timeout\n");
+    process.exit(1);
+  }, FORCE_EXIT_TIMEOUT_MS);
+  forceExitTimer.unref?.();
+
+  // Codex --remote TUI clients depend on this app-server connection. Dashboard
+  // lifecycle and transport API controls must preserve it; users end remote
+  // sessions from Codex or the OS when they intentionally want teardown.
+  codexBridge.stop();
   supervisor.stop();
   if (typeof server.closeAllConnections === "function") {
     server.closeAllConnections();
   }
   server.close(() => {
+    clearTimeout(forceExitTimer);
     process.stderr.write("[server] clean exit\n");
     process.exit(0);
   });
-  setTimeout(() => {
-    process.stderr.write("[server] force exit after 3s timeout\n");
-    process.exit(1);
-  }, 3000);
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));

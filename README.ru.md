@@ -45,7 +45,7 @@
 
 ![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
 
-*Локальный дашборд с ожидающими сообщениями, сгруппированными по получателю, с project filter, переключением RU/EN, светлой/тёмной темой и звуковым уведомлением.*
+*Локальный дашборд с ожидающими сообщениями, сгруппированными по получателю, с project filter, переключением RU/EN, светлой/тёмной темой и звуковым уведомлением. Маркер непрочитанного опирается на сырое поле frontmatter `received_at`, а не на derived display timestamp из library reader'а.*
 
 ---
 
@@ -81,6 +81,18 @@ start-workflow.cmd
 stop-workflow.cmd
 start-workflow-hidden.vbs
 ```
+
+### Запуск Codex Remote Сессий
+
+Для Codex mailbox automation запускайте проектные сессии через zero-touch remote launcher, а не через сырой `codex --remote`:
+
+```bash
+node scripts/codex-remote-project.mjs
+```
+
+Launcher проверяет dashboard backend и Codex app-server, передаёт `-C "$PWD"` и отправляет короткий bootstrap prompt, чтобы у remote thread был initial rollout до первой mailbox-доставки.
+
+Сырой `codex --remote ws://127.0.0.1:4501` не является поддерживаемым mailbox entry point: он может создать loaded thread без rollout, и доставка останется заблокированной до ручного первого prompt.
 
 ### Agent-side mailbox CLI
 

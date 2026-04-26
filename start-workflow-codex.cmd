@@ -2,8 +2,8 @@
 setlocal enableextensions enabledelayedexpansion
 
 rem Launcher: dashboard в Codex-режиме (реальный CodexAdapter через WSL).
-rem Двойной клик запускает и API, и UI в одном окне.
-rem Для mock-режима (обычный день) используй start-workflow.cmd.
+rem По умолчанию уходит в hidden-relay через start-workflow.cmd.
+rem Для видимого debug-запуска используй start-workflow.cmd --visible.
 
 set "DASHBOARD_ADAPTER=codex"
 
