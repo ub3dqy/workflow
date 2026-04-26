@@ -108,11 +108,11 @@ The execution report must record:
 | 4 | Global multi-project visibility | Makes 4-5 parallel projects readable without manual memory load | baseline already exists | verify-and-freeze |
 | 5 | Project isolation + deliverable filtering | Prevents cross-project leakage and stops automation from delivering unsafe rows | baseline already exists | verify-and-freeze |
 | 6 | Claude-side passive automation foundation | Preserves the delivered Claude registration baseline and explicitly records the reverted Stop-hook delivery path as not-current baseline | partially delivered: Phase B registration exists; historical Phase C Stop-hook delivery was reverted in `22e7754` | verify-and-freeze with explicit revert acknowledgement |
-| 7 | Codex `app-server + --remote` reminder bridge | This is the experimentally validated path for live Codex reminders under WSL and the first candidate replacement for the reverted Claude Stop-hook delivery path | live path proven on 2026-04-24, implementation not approved | plan-only until explicit approval |
-| 8 | Dedup ledger + retry-safe delivery state for Codex path | Prevents duplicate reminders and preserves blocked-state traceability | planned, and required before point 7 is operator-enabled | implement only after 7 approval |
-| 9 | Dashboard Codex transport control + health | Hides support-process babysitting behind the dashboard page | planned | implement only after 7 approval |
+| 7 | Codex `app-server + --remote` reminder bridge | This is the shipped path for live Codex reminders under WSL and the replacement for the reverted Claude Stop-hook delivery path | implemented in `9ce885d`; follow-up docs in `3047919` | baseline-freeze / regression-only |
+| 8 | Dedup ledger + retry-safe delivery state for Codex path | Prevents duplicate reminders and preserves blocked-state traceability | implemented inside Stage 7A runtime delivery ledger | baseline-freeze / regression-only |
+| 9 | Dashboard Codex transport control + health | Hides support-process babysitting behind the dashboard page | implemented with safe `Start`, health, and confirmed emergency `Force stop`; normal destructive Stop/Restart are intentionally disabled | baseline-freeze / UX polish only |
 | 10 | Late hardening: ambiguity, lease, blocked-state recovery | Useful only after the basic bridge exists or if same-project concurrency becomes real | conditional late stage | defer unless real need appears |
-| 11 | Diagnostics, rollback, runbooks, and closure tests | Makes the system operable and reviewable instead of fragile tribal knowledge | partially present, not yet unified | always required for any coded stage |
+| 11 | Diagnostics, rollback, runbooks, and closure tests | Makes the system operable and reviewable instead of fragile tribal knowledge | Stage 7A report/work-verification exist; unified operator doctor remains open | required for any coded stage |
 
 ## 7. Detailed Mini-Stage Plans
 
@@ -416,7 +416,7 @@ The execution report must record:
 
 ### 7.7 Point 7 — Codex `app-server + --remote` reminder bridge
 
-**Status**: validated path, not approved for implementation at the time of this roadmap
+**Status**: implemented in Stage 7A (`9ce885d`) and documented in follow-up cleanup (`3047919`)
 **Depends on**: 3, 4, 5
 **Primary historical source**: draft 7A bridge brief + live proof from 2026-04-24
 **Official docs**: D1, D2, D3, D4, D5, D6, D9, D10
@@ -427,7 +427,22 @@ The execution report must record:
 - `tool_search` is mandatory if the needed Codex/OpenAI tools are deferred;
 - `build-web-apps:react-best-practices` becomes mandatory only if this stage also edits dashboard React code.
 
-**Implementation plan**
+**Current baseline as of 2026-04-27**
+
+- `scripts/codex-app-server-client.mjs` provides the shared app-server JSON-RPC client.
+- `dashboard/codex-bridge.mjs` is the fail-closed Codex reminder bridge.
+- The bridge uses loopback-only transport, metadata-only reminders, `thread/resume`, and `turn/start`.
+- Hook-missing Codex remote sessions are routed through live app-server thread metadata when exactly one eligible CLI project thread exists.
+- `codexr` / `scripts/codex-remote-project.mjs` is the supported zero-touch operator entry point; raw `codex --remote` remains an unsupported mailbox entry point because it can load a thread with no rollout.
+- The current baseline must be changed only through regression fixes or explicitly approved new stages.
+
+**Residual risks**
+
+- Zero-touch startup is solved for `codexr`; raw `codex --remote` still has the no-rollout cold-start trap and remains deferred.
+- App-server fallback thread freshness defaults to 15 minutes; the default is tested structurally, but not yet load-tested under many concurrent loaded threads.
+- `Force stop` is intentionally destructive and operator-only; ordinary lifecycle actions must keep preserving existing remote sessions.
+
+**Historical implementation plan**
 
 1. Re-check official Codex app-server docs before coding:
    - connection handshake;
@@ -459,7 +474,7 @@ The execution report must record:
    - active in-flight turn;
    - non-loopback target.
 7. Keep mailbox bodies out of the Codex chat; inject metadata reminder only.
-8. Do not operator-enable the bridge as a persistent background feature until point 8 has landed. If point 7 is tested or merged before point 8, it must remain explicit lab/manual non-persistent mode only.
+8. Do not operator-enable the bridge as a persistent background feature until point 8 has landed. This constraint is now satisfied because point 8 shipped inside Stage 7A.
 
 **Required evidence / exit gate**
 
@@ -481,7 +496,7 @@ The execution report must record:
 
 ### 7.8 Point 8 — Dedup ledger + retry-safe delivery state for Codex path
 
-**Status**: planned, and required before point 7 is operator-enabled
+**Status**: implemented inside Stage 7A (`9ce885d`)
 **Depends on**: 7
 **Primary historical source**: draft 7A bridge brief
 **Official docs**: D1, D6, D8, D11
@@ -491,7 +506,21 @@ The execution report must record:
 - MCP/docs log required because this stage depends on transport semantics;
 - no fake skill usage.
 
-**Implementation plan**
+**Current baseline as of 2026-04-27**
+
+- Delivery state is persisted under `mailbox-runtime/deliveries.json`.
+- Delivery dedup is keyed by mailbox `relativePath`.
+- Delivery rows record project, mailbox path, thread/session evidence, attempt timestamps, signaled/blocked state, and structured RPC metadata where available.
+- Duplicate pending reminders are suppressed across bridge ticks and process restarts.
+- Completed `signaled` rows are retained as evidence; stale blocked rows are pruned when their mailbox row leaves pending state.
+- Mailbox markdown files are not mutated as a dedup shortcut.
+
+**Residual risks**
+
+- Retained delivery history is bounded by current implementation defaults, not by a separately load-tested archival policy.
+- Lease/claim semantics remain out of scope until same-project concurrency or repeated ambiguous/active-thread evidence appears.
+
+**Historical implementation plan**
 
 1. Persist delivery state in runtime files, not only memory.
 2. Key delivery dedup by mailbox `relativePath`, not by chat text.
@@ -521,7 +550,7 @@ The execution report must record:
 
 ### 7.9 Point 9 — Dashboard Codex transport control + health
 
-**Status**: planned
+**Status**: implemented with revised safety contract in Stage 7A (`9ce885d`) and hardening follow-up
 **Depends on**: 1, 2, 7, 8
 **Primary historical source**: draft 7A bridge brief + accepted operator UX requirement
 **Official docs**: D1, D2, D3, D4, D6, D9, D10, D12, D13
@@ -531,14 +560,27 @@ The execution report must record:
 - `build-web-apps:react-best-practices` for dashboard React changes;
 - `tool_search` if deferred MCP or UI tools are needed.
 
-**Implementation plan**
+**Current baseline as of 2026-04-27**
+
+- Dashboard exposes Codex transport status, safe `Start`, bridge health, delivery count, last blocked reason, last ready timestamp, last tick, WebSocket URL, and last error.
+- Normal destructive `Stop` and `Restart` transport routes fail closed with HTTP 409 `codex_transport_lifecycle_preserved`; they do not call `codexTransport.stop()` or `codexTransport.restart()`.
+- A separate `Force stop` emergency action requires typed confirmation (`STOP`) and is the only UI/API path that intentionally tears down the app-server transport.
+- Closing or restarting the dashboard must preserve open `codex --remote` sessions. Users end remote Codex sessions from their Codex TUI, not by killing the shared transport.
+- UI polish is allowed only if it preserves this safety contract.
+
+**Residual risks**
+
+- The emergency `Force stop` action can still disconnect live sessions by design; it remains guarded by typed confirmation and must not become the normal operator path.
+- UI wording must keep distinguishing the shared support transport from visible project Codex sessions.
+
+**Historical implementation plan**
 
 1. Add a hidden support-process manager for Codex app-server.
 2. Keep the dashboard page as the operator shell for:
    - transport status;
    - start;
-   - stop;
-   - restart;
+   - safe session-preserving lifecycle status;
+   - confirmed emergency force-stop;
    - last error / last healthy tick.
 3. Make lifecycle idempotent:
    - starting an already healthy transport should not spawn duplicates;
@@ -548,7 +590,9 @@ The execution report must record:
 
 **Required evidence / exit gate**
 
-- operator can start/stop/restart the hidden Codex support transport from the dashboard;
+- operator can start the hidden Codex support transport from the dashboard;
+- ordinary stop/restart paths preserve open Codex remote sessions;
+- emergency force-stop is explicitly confirmed before it can disconnect sessions;
 - health state is readable without opening a service terminal;
 - dashboard build remains green;
 - the report shows the exact React/Vite and OpenAI docs consulted.
@@ -640,8 +684,8 @@ The execution report must record:
 
 1. Points 1-2 may be verified as current-code prerequisites, but they are not baseline-frozen until a retroactive artifact trail exists or they are explicitly re-baselined in an approved package.
 2. Points 3-6 are baseline-lock stages. They are verified first and only reopened if the report finds a real regression.
-3. Point 7 is the first new functional automation stage, but it is **not approved** merely because the path was experimentally proven.
-4. Points 8 and 9 may not start before point 7 is explicitly approved and its execution report is complete.
+3. Point 7 is now approved and shipped as Stage 7A. Future work must treat it as current baseline and start from the Stage 7A report/work-verification evidence, not from the older plan-only wording.
+4. Points 8 and 9 are also part of the shipped Stage 7A baseline. Future edits to delivery dedup or transport lifecycle are regression fixes or new approved stages, not continuation of the old unapproved plan.
 5. Point 10 is conditional late hardening. It stays deferred unless runtime evidence proves it is needed.
 6. Point 11 is mandatory closure for any coded stage.
 
