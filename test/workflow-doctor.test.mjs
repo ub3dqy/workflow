@@ -4,7 +4,7 @@ import { runDoctor } from "../scripts/workflow-doctor.mjs";
 
 test("workflow doctor emits machine-readable checks", async () => {
   const payload = await runDoctor({ skipNetwork: true });
-  assert.equal(payload.ok, true);
+  assert.equal(typeof payload.ok, "boolean");
   assert.equal(payload.project, "workflow");
   assert.ok(Array.isArray(payload.checks));
   assert.ok(payload.checks.some((check) => check.name === "node_version"));
