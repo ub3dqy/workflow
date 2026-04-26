@@ -24,6 +24,24 @@ jobs:
       - run: npm ci
       - run: npx vite build
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Run root Node tests
+        run: node --test test/*.test.mjs
+
   personal-data-check:
     runs-on: ubuntu-latest
     steps:
@@ -34,7 +52,7 @@ jobs:
           PD_PATTERNS: dmaka|ONLYHOME|bitfighter|bitfighterfox|olynapros
         run: |
           FOUND=$(grep -riE "$PD_PATTERNS" \
-            --include="*.js" --include="*.jsx" --include="*.json" \
+            --include="*.js" --include="*.jsx" --include="*.mjs" --include="*.json" \
             --include="*.md" --include="*.html" \
             --exclude-dir=.github \
             --exclude-dir=codex-tasks \
