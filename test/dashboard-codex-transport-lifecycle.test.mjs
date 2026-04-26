@@ -72,4 +72,6 @@ test("dashboard UI does not expose normal stop or restart transport controls", a
   assert.match(source, /forceStopCodexTransport/);
   assert.match(source, /controlCodexTransport\("force-stop"\)/);
   assert.match(source, /CODEX_FORCE_STOP_CONFIRMATION/);
+  assert.match(source, /codexTransportSessionsValue/);
+  assert.match(source, /codexTransportLifecycleValue/);
 });

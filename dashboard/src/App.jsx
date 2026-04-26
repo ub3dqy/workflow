@@ -97,8 +97,12 @@ const translations = {
     shutdownNotice: "Workflow завершает работу. Эту страницу можно закрыть.",
     codexTransportTitle: "Codex transport",
     codexTransportHelp:
-      "Dashboard стартует и проверяет transport, сохраняя открытые Codex --remote сессии при закрытии или перезапуске dashboard.",
+      "Обычные stop/restart сохраняют открытые remote-сессии. Для новой проектной сессии запускайте codexr из нужного каталога.",
     codexTransportState: "Статус",
+    codexTransportSessions: "Сессии",
+    codexTransportSessionsValue: "запуск через codexr",
+    codexTransportLifecycle: "Stop/Restart",
+    codexTransportLifecycleValue: "сессии сохраняются",
     codexBridgeState: "Bridge",
     codexBridgeDeliveries: "Записи доставки",
     codexBridgeBlocked: "Блокировка",
@@ -184,8 +188,12 @@ const translations = {
     shutdownNotice: "Workflow is shutting down. You can close this page.",
     codexTransportTitle: "Codex transport",
     codexTransportHelp:
-      "The dashboard starts and health-checks the transport while preserving open Codex --remote sessions across dashboard close or restart.",
+      "Normal stop/restart preserve open remote sessions. Start new project sessions with codexr from the target directory.",
     codexTransportState: "State",
+    codexTransportSessions: "Sessions",
+    codexTransportSessionsValue: "launch with codexr",
+    codexTransportLifecycle: "Stop/Restart",
+    codexTransportLifecycleValue: "sessions preserved",
     codexBridgeState: "Bridge",
     codexBridgeDeliveries: "Delivery records",
     codexBridgeBlocked: "Blocked",
@@ -2247,6 +2255,14 @@ export default function App() {
                 >
                   {codexBridgeState.health?.state || "unknown"}
                 </span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexTransportSessions}</span>
+                <span className="mono">{t.codexTransportSessionsValue}</span>
+              </p>
+              <p className="runtimeMeta">
+                <span className="chip">{t.codexTransportLifecycle}</span>
+                <span className="mono">{t.codexTransportLifecycleValue}</span>
               </p>
               <div className="transportActions">
                 <button
