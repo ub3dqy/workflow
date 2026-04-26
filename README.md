@@ -188,7 +188,8 @@ flowchart LR
 
 GitHub Actions runs:
 
-- `build` — `npm ci`, `npx vite build`, and `node --test test/*.test.mjs`
+- `build` — dashboard `npm ci`, then `npx vite build`
+- `test` — dashboard `npm ci`, then `node --test test/*.test.mjs`
 - `workflow doctor` is not part of CI networking, but `test/workflow-doctor.test.mjs` verifies its JSON/static mode
 - `personal-data-check` — regex scan for accidental PII and hostname leaks
 

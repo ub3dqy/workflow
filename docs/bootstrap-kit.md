@@ -70,6 +70,8 @@ The script only manages:
 
 It does not copy task history, runtime files, mailbox data, dashboard build output, or session state.
 
+This kit copies workflow primitives, not project history. Do not use it to restore corrupted state in an existing workflow repo; use git restore or the relevant runtime backup path for that.
+
 ## 5. Validate A Live Session
 
 After adding reviewed config to the target project:

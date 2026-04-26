@@ -188,7 +188,8 @@ flowchart LR
 
 GitHub Actions запускает:
 
-- `build` — `npm ci`, `npx vite build` и `node --test test/*.test.mjs`
+- `build` — dashboard `npm ci`, затем `npx vite build`
+- `test` — dashboard `npm ci`, затем `node --test test/*.test.mjs`
 - `workflow doctor` не делает network probes в CI, но `test/workflow-doctor.test.mjs` проверяет его JSON/static mode
 - `personal-data-check` — regex-скан на PII и hostname leaks
 
