@@ -104,6 +104,16 @@ If `codexr` is not installed on `PATH`, run the launcher directly:
 node scripts/codex-remote-project.mjs
 ```
 
+### Runtime Doctor
+
+Run the read-only doctor when the dashboard or Codex transport state is unclear:
+
+```bash
+node scripts/workflow-doctor.mjs
+```
+
+It checks Node, dashboard dependencies, Codex launchers, runtime JSON files, mailbox session binding, and loopback health for `3003`, `9119`, and `4501`. Use `--json` for machine-readable output, `--skip-network` for static checks only, or `--verbose` when full local paths are needed.
+
 ### Agent-side mailbox CLI
 
 These commands are for **bound agent sessions**. Agent-path CLI requires explicit `--project` and the current session must already be bound to that project.
@@ -171,12 +181,15 @@ flowchart LR
 - [workflow-instructions-codex.md](./workflow-instructions-codex.md) — Codex guide
 - [local-claude-codex-mailbox-workflow.md](./local-claude-codex-mailbox-workflow.md) — mailbox protocol
 - [docs/mailbox-agent-onboarding.md](./docs/mailbox-agent-onboarding.md) — agent mailbox and Codex remote launch rules
+- [docs/bootstrap-kit.md](./docs/bootstrap-kit.md) — dry-run bootstrap checks and minimal config writer for another repo
+- [docs/codex-tasks/external-coordinator-vnext/brief.md](./docs/codex-tasks/external-coordinator-vnext/brief.md) — design-only coordinator backlog
 
 ## CI And Safety
 
 GitHub Actions runs:
 
-- `build` — `npm ci && npx vite build`
+- `build` — `npm ci`, `npx vite build`, and `node --test test/*.test.mjs`
+- `workflow doctor` is not part of CI networking, but `test/workflow-doctor.test.mjs` verifies its JSON/static mode
 - `personal-data-check` — regex scan for accidental PII and hostname leaks
 
 Before any push, run the same personal-data scan locally.

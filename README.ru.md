@@ -104,6 +104,16 @@ Dashboard может стартовать и health-check'ать Codex transport
 node scripts/codex-remote-project.mjs
 ```
 
+### Runtime Doctor
+
+Если состояние dashboard или Codex transport непонятно, запускайте read-only doctor:
+
+```bash
+node scripts/workflow-doctor.mjs
+```
+
+Он проверяет Node, dashboard dependencies, Codex launchers, runtime JSON files, mailbox session binding и loopback health для `3003`, `9119` и `4501`. Флаг `--json` даёт machine-readable output, `--skip-network` оставляет только static checks, а `--verbose` показывает полные локальные пути.
+
 ### Agent-side mailbox CLI
 
 Эти команды предназначены для **agent session с уже привязанным project**. На agent-path CLI обязательны `--project` и корректный bound session.
@@ -171,12 +181,15 @@ flowchart LR
 - [workflow-instructions-codex.md](./workflow-instructions-codex.md) — guide для Codex
 - [local-claude-codex-mailbox-workflow.md](./local-claude-codex-mailbox-workflow.md) — mailbox protocol
 - [docs/mailbox-agent-onboarding.md](./docs/mailbox-agent-onboarding.md) — mailbox rules и запуск Codex remote
+- [docs/bootstrap-kit.md](./docs/bootstrap-kit.md) — dry-run bootstrap checks и минимальная config-запись для другого repo
+- [docs/codex-tasks/external-coordinator-vnext/brief.md](./docs/codex-tasks/external-coordinator-vnext/brief.md) — design-only backlog для coordinator
 
 ## CI И Безопасность
 
 GitHub Actions запускает:
 
-- `build` — `npm ci && npx vite build`
+- `build` — `npm ci`, `npx vite build` и `node --test test/*.test.mjs`
+- `workflow doctor` не делает network probes в CI, но `test/workflow-doctor.test.mjs` проверяет его JSON/static mode
 - `personal-data-check` — regex-скан на PII и hostname leaks
 
 Перед любым push прогоняйте тот же personal-data scan локально.
