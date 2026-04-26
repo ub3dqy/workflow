@@ -16,6 +16,9 @@ Thumbs.db
 # Codex CLI sandbox state (personal, per-session)
 .codex/sessions/
 
+# Local browser/tool traces
+.playwright-mcp/
+
 # Personal / local-only configuration and docs
 .claude/settings.local.json
 AGENTS.md

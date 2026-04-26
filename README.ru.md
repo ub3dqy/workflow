@@ -78,8 +78,10 @@ Windows launchers:
 
 ```text
 start-workflow.cmd
-stop-workflow.cmd
 start-workflow-hidden.vbs
+start-workflow-codex.cmd
+start-workflow-codex-hidden.vbs
+stop-workflow.cmd
 ```
 
 ### Запуск Codex Remote Сессий
@@ -87,12 +89,20 @@ start-workflow-hidden.vbs
 Для Codex mailbox automation запускайте проектные сессии через zero-touch remote launcher, а не через сырой `codex --remote`:
 
 ```bash
-node scripts/codex-remote-project.mjs
+codexr
 ```
 
-Launcher проверяет dashboard backend и Codex app-server, передаёт `-C "$PWD"` и отправляет короткий bootstrap prompt, чтобы у remote thread был initial rollout до первой mailbox-доставки.
+`codexr` — поддерживаемый operator entry point. Launcher проверяет dashboard backend и Codex app-server, передаёт `-C "$PWD"` и отправляет короткий bootstrap prompt, чтобы у remote thread был initial rollout до первой mailbox-доставки.
 
 Сырой `codex --remote ws://127.0.0.1:4501` не является поддерживаемым mailbox entry point: он может создать loaded thread без rollout, и доставка останется заблокированной до ручного первого prompt.
+
+Dashboard может стартовать и health-check'ать Codex transport, но не владеет живыми remote-сессиями. Обычные Stop/Restart transport calls fail-closed, поэтому открытые `codex --remote` окна остаются подключёнными. Отдельный `Force stop` — emergency-only действие с typed confirmation.
+
+Если `codexr` не установлен в `PATH`, запускайте wrapper напрямую:
+
+```bash
+node scripts/codex-remote-project.mjs
+```
 
 ### Agent-side mailbox CLI
 
@@ -160,6 +170,7 @@ flowchart LR
 - [workflow-instructions-claude.md](./workflow-instructions-claude.md) — guide для Claude
 - [workflow-instructions-codex.md](./workflow-instructions-codex.md) — guide для Codex
 - [local-claude-codex-mailbox-workflow.md](./local-claude-codex-mailbox-workflow.md) — mailbox protocol
+- [docs/mailbox-agent-onboarding.md](./docs/mailbox-agent-onboarding.md) — mailbox rules и запуск Codex remote
 
 ## CI И Безопасность
 
@@ -169,6 +180,12 @@ GitHub Actions запускает:
 - `personal-data-check` — regex-скан на PII и hostname leaks
 
 Перед любым push прогоняйте тот же personal-data scan локально.
+
+Local-only runtime state намеренно исключён из commit'ов:
+
+- `agent-mailbox/` и `mailbox-runtime/` — live mailbox и supervisor state
+- `.codex/sessions/` — per-session state Codex
+- `.playwright-mcp/` — локальные Playwright MCP traces
 
 ## Contribution
 
