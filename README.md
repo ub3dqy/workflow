@@ -4,13 +4,20 @@
 
 [![CI](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml) [![Node](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](./dashboard/package.json)
 
-> Two AI agents, one repo. **Claude** plans and executes, **Codex** synthesizes, reviews, and verifies, **you** decide. The repo gives them a mailbox transport, tracked artifacts, and a dashboard that shows mailbox state.
+> Two AI agents, one local control plane. **Claude** and **Codex** can now be launched from any project with `clauder` and `codexr`; this repo provides the mailbox transport, wake-up channel, dashboard, and tracked workflow artifacts.
 
 ---
 
 ## What This Repo Is
 
 This repository documents and implements a sequential two-agent workflow for **Claude Code** and **OpenAI Codex CLI**.
+
+It is also the operator toolkit for running that workflow day to day:
+
+- `clauder` starts Claude Code with mailbox wake-up enabled through a user-scoped `workflow-mailbox` MCP channel.
+- `codexr` starts a Codex remote session for the current project and ensures the dashboard backend/app-server are ready.
+- `workflow-mailbox*` commands provide the bounded mailbox CLI used by the agents.
+- the dashboard shows pending/archived mail, runtime state, Codex transport health, and project filters.
 
 Current contract:
 
@@ -57,24 +64,58 @@ Important: most existing `docs/codex-tasks/*.md` files are historical archive fr
 - **Windows** or **WSL2 Linux**
 - **Git**
 
-### Setup
+### Install Once
 
 ```bash
 git clone https://github.com/ub3dqy/workflow.git
-cd workflow/dashboard
+cd workflow
+cd dashboard
 npm install
+cd ..
 ```
 
-### Launch the dashboard
+Install the launchers once:
 
 ```bash
-cd dashboard
-npm run dev
-# UI:  http://127.0.0.1:9119
-# API: http://127.0.0.1:3003
+# Windows / Git Bash
+install-clauder.cmd
+
+# WSL / Linux
+./install-clauder
 ```
 
-Optional Windows launchers:
+The installer adds `clauder`, `codexr`, and the `workflow-mailbox*` service commands to your user PATH. If the current terminal was already open, run `hash -r` or open a new one.
+
+### Daily Use
+
+Start the dashboard:
+
+```bash
+# Windows
+start-workflow.cmd
+
+# Or from any shell
+cd dashboard
+npm run dev
+```
+
+Then open agent sessions from the target project directory, usually in separate terminals:
+
+```bash
+cd /path/to/your-project
+clauder
+codexr
+```
+
+Local URLs:
+
+```text
+Dashboard UI:  http://127.0.0.1:9119
+Dashboard API: http://127.0.0.1:3003
+Codex bridge:  ws://127.0.0.1:4501
+```
+
+Windows helper launchers:
 
 ```text
 start-workflow.cmd
@@ -82,17 +123,10 @@ start-workflow-hidden.vbs
 start-workflow-codex.cmd
 start-workflow-codex-hidden.vbs
 clauder.cmd
+codexr.cmd
 install-clauder.cmd
 start-claude-mailbox.cmd
 stop-workflow.cmd
-```
-
-Everyday commands after setup:
-
-```text
-Dashboard: start-workflow.cmd
-Codex:     codexr
-Claude:    clauder
 ```
 
 ### Start Codex Remote Sessions
@@ -109,7 +143,7 @@ Raw `codex --remote ws://127.0.0.1:4501` is not the supported mailbox entry poin
 
 The dashboard can start and health-check the Codex transport without owning live remote sessions. Normal Stop/Restart transport calls fail closed so existing `codex --remote` windows stay connected. The separate `Force stop` action is emergency-only and requires typed confirmation.
 
-If `codexr` is not installed on `PATH`, run the launcher directly:
+If `codexr` is not installed on `PATH`, run `install-clauder.cmd` once or use the launcher directly:
 
 ```bash
 node scripts/codex-remote-project.mjs
@@ -119,21 +153,25 @@ node scripts/codex-remote-project.mjs
 
 Claude Code v2.1.80+ can receive pushed mailbox events through an MCP channel. The `clauder` launcher ensures a user-scoped `workflow-mailbox` MCP server exists, so ordinary projects do not need their own `.mcp.json` just to receive mailbox wake-ups.
 
-If the command is not installed yet, run once:
-
-```text
-install-clauder.cmd
-```
-
-The installer adds `clauder` and the mailbox service commands (`workflow-mailbox*`) for Windows shells and Git Bash (`C:\Users\<you>\bin`). If an already-open Git Bash still reports `command not found`, run `hash -r` or open a new terminal.
-
-Then start Claude with:
+Start Claude from the project you want bound to mailbox:
 
 ```bash
 clauder
 ```
 
-This is the Claude equivalent of `codexr`: one command opens Claude with mailbox wake-up already enabled. If `clauder` is not on `PATH` yet, run it from the repo root with:
+This is the Claude equivalent of `codexr`: one command opens Claude with mailbox wake-up already enabled. On first run, `clauder` checks/creates the user-scoped MCP server and prints:
+
+```text
+[claude-mailbox] user MCP: created
+```
+
+Later runs print:
+
+```text
+[claude-mailbox] user MCP: existing
+```
+
+If `clauder` is not on `PATH` yet, run `install-clauder.cmd` once or use the repo-local fallback:
 
 ```text
 clauder.cmd
@@ -154,6 +192,15 @@ clauder --project other-project
 ```
 
 Use `bootstrap-workflow.mjs` only when that project also needs persistent Codex hooks or checked-in workflow config.
+
+Quick diagnostics:
+
+```bash
+clauder --no-launch
+claude mcp get workflow-mailbox
+```
+
+If Claude shows `Your account does not have access to Claude Code`, run `/login` in Claude Code and restart `clauder`. If Git Bash cannot find the command after installation, run `hash -r`.
 
 For a trusted local session where permission prompts must be disabled completely, use the explicit bypass mode:
 

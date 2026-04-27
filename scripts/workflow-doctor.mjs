@@ -202,6 +202,8 @@ async function checkCoreFiles(record) {
   const requiredFiles = [
     "dashboard/package.json",
     ".mcp.json",
+    "codexr",
+    "codexr.cmd",
     "clauder",
     "clauder.cmd",
     "install-clauder",

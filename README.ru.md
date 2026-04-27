@@ -4,13 +4,20 @@
 
 [![CI](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ub3dqy/workflow/actions/workflows/ci.yml) [![Node](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](./dashboard/package.json)
 
-> Два AI-агента, один репозиторий. **Claude** планирует и исполняет, **Codex** синтезирует, ревьюит и верифицирует, **вы** принимаете решения. Репозиторий даёт им mailbox-транспорт, tracked artifacts и локальный дашборд для наблюдения за состоянием почты.
+> Два AI-агента, один локальный control plane. **Claude** и **Codex** теперь запускаются из любого проекта командами `clauder` и `codexr`; этот репозиторий даёт mailbox-транспорт, wake-up channel, дашборд и tracked workflow artifacts.
 
 ---
 
 ## Что Это
 
 Это репозиторий с документацией и инструментарием для sequential two-agent workflow между **Claude Code** и **OpenAI Codex CLI**.
+
+Это также операторский toolkit для ежедневной работы:
+
+- `clauder` запускает Claude Code с mailbox wake-up через user-scoped MCP channel `workflow-mailbox`.
+- `codexr` запускает Codex remote session для текущего проекта и поднимает dashboard backend/app-server при необходимости.
+- `workflow-mailbox*` команды дают bounded mailbox CLI для агентов.
+- Дашборд показывает pending/archive mail, runtime state, Codex transport health и project filters.
 
 Текущий контракт:
 
@@ -57,24 +64,58 @@
 - **Windows** или **WSL2 Linux**
 - **Git**
 
-### Установка
+### Установить Один Раз
 
 ```bash
 git clone https://github.com/ub3dqy/workflow.git
-cd workflow/dashboard
+cd workflow
+cd dashboard
 npm install
+cd ..
 ```
 
-### Запуск дашборда
+Поставьте launchers один раз:
 
 ```bash
-cd dashboard
-npm run dev
-# UI:  http://127.0.0.1:9119
-# API: http://127.0.0.1:3003
+# Windows / Git Bash
+install-clauder.cmd
+
+# WSL / Linux
+./install-clauder
 ```
 
-Windows launchers:
+Установщик добавляет `clauder`, `codexr` и service-команды `workflow-mailbox*` в пользовательский PATH. Если терминал уже был открыт, выполните `hash -r` или откройте новый.
+
+### Ежедневный Запуск
+
+Запустите дашборд:
+
+```bash
+# Windows
+start-workflow.cmd
+
+# Или из любого shell
+cd dashboard
+npm run dev
+```
+
+Открывайте агентские сессии из каталога нужного проекта, обычно в отдельных терминалах:
+
+```bash
+cd /path/to/your-project
+clauder
+codexr
+```
+
+Локальные адреса:
+
+```text
+Dashboard UI:  http://127.0.0.1:9119
+Dashboard API: http://127.0.0.1:3003
+Codex bridge:  ws://127.0.0.1:4501
+```
+
+Windows helper launchers:
 
 ```text
 start-workflow.cmd
@@ -82,17 +123,10 @@ start-workflow-hidden.vbs
 start-workflow-codex.cmd
 start-workflow-codex-hidden.vbs
 clauder.cmd
+codexr.cmd
 install-clauder.cmd
 start-claude-mailbox.cmd
 stop-workflow.cmd
-```
-
-Повседневные команды после установки:
-
-```text
-Dashboard: start-workflow.cmd
-Codex:     codexr
-Claude:    clauder
 ```
 
 ### Запуск Codex Remote Сессий
@@ -109,7 +143,7 @@ codexr
 
 Dashboard может стартовать и health-check'ать Codex transport, но не владеет живыми remote-сессиями. Обычные Stop/Restart transport calls fail-closed, поэтому открытые `codex --remote` окна остаются подключёнными. Отдельный `Force stop` — emergency-only действие с typed confirmation.
 
-Если `codexr` не установлен в `PATH`, запускайте wrapper напрямую:
+Если `codexr` не установлен в `PATH`, один раз запустите `install-clauder.cmd` или используйте wrapper напрямую:
 
 ```bash
 node scripts/codex-remote-project.mjs
@@ -117,29 +151,33 @@ node scripts/codex-remote-project.mjs
 
 ### Запуск Claude С Mailbox Wake-Up
 
-Claude Code v2.1.80+ может получать push-события почты через project MCP channel из [`.mcp.json`](./.mcp.json):
+Claude Code v2.1.80+ может получать push-события почты через MCP channel. `clauder` сам проверяет user-scoped MCP server `workflow-mailbox`, поэтому обычным проектам не нужен свой `.mcp.json` только ради wake-up.
 
-Если команда ещё не установлена, один раз запустите:
-
-```text
-install-clauder.cmd
-```
-
-Установщик добавляет `clauder` и service-команды mailbox (`workflow-mailbox*`) для Windows shell и Git Bash (`C:\Users\<you>\bin`). Если текущий Git Bash уже был открыт и всё ещё пишет `command not found`, выполните `hash -r` или откройте новый терминал.
-
-После этого обычный запуск:
+Запускайте Claude из проекта, к которому нужно привязать mailbox:
 
 ```bash
 clauder
 ```
 
-Это Claude-аналог `codexr`: одна команда открывает Claude уже с mailbox wake-up. Если `clauder` ещё не добавлен в `PATH`, из корня repo можно запустить:
+Это Claude-аналог `codexr`: одна команда открывает Claude уже с mailbox wake-up. При первом запуске `clauder` проверяет/создаёт user-scoped MCP server и выводит:
+
+```text
+[claude-mailbox] user MCP: created
+```
+
+Дальше будет:
+
+```text
+[claude-mailbox] user MCP: existing
+```
+
+Если `clauder` ещё не добавлен в `PATH`, один раз запустите `install-clauder.cmd` или используйте fallback из корня repo:
 
 ```text
 clauder.cmd
 ```
 
-Launcher стартует Claude из текущего project directory с channel `server:workflow-mailbox` и permission mode `auto`:
+Launcher стартует Claude из текущего project directory с channel `server:workflow-mailbox`, permission mode `auto` и env-переменными, которые говорят user-scoped MCP server, какой project slug опрашивать:
 
 ```powershell
 claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto
@@ -147,13 +185,22 @@ claude --dangerously-load-development-channels server:workflow-mailbox --permiss
 
 При первом запуске Claude попросит подтвердить, что это локальный development channel. После подтверждения `workflow-mailbox-channel` стартует как MCP server `workflow-mailbox`, read-only опрашивает центральный `agent-mailbox/to-claude/` и пушит pending-сообщения текущего project slug в живую Claude-сессию через `notifications/claude/channel`. Сам channel не вызывает `mailbox.mjs list` и не пишет `received_at`; Claude по-прежнему использует обычный mailbox CLI, когда реально забирает письмо в работу.
 
-Для другого проекта сначала добавьте минимальный config из workflow repo:
+Для другого проекта просто запустите `clauder` из каталога этого проекта. Launcher берёт project slug из существующего workflow config, если он есть, иначе из имени папки с заменой пробелов на `-`. Если нужен конкретный slug, передайте его явно:
 
 ```bash
-node /path/to/workflow/scripts/bootstrap-workflow.mjs --target /path/to/other-project --project other-project --write
+clauder --project other-project
 ```
 
-После этого запускайте `clauder` из каталога этого проекта.
+`bootstrap-workflow.mjs` нужен только если проекту также требуются persistent Codex hooks или checked-in workflow config.
+
+Быстрая диагностика:
+
+```bash
+clauder --no-launch
+claude mcp get workflow-mailbox
+```
+
+Если Claude показывает `Your account does not have access to Claude Code`, выполните `/login` в Claude Code и перезапустите `clauder`. Если Git Bash после установки не видит команду, выполните `hash -r`.
 
 Для доверенной локальной сессии, где вообще не нужны permission prompts, есть явный bypass-режим:
 

@@ -10,6 +10,12 @@ set "TARGET=%BIN%\clauder.cmd"
   echo node "%~dp0scripts\claude-mailbox.mjs" %%*
 ) > "%TARGET%"
 
+set "CODEXR_TARGET=%BIN%\codexr.cmd"
+(
+  echo @echo off
+  echo node "%~dp0scripts\codex-remote-project.mjs" %%*
+) > "%CODEXR_TARGET%"
+
 set "MAILBOX_TARGET=%BIN%\workflow-mailbox.cmd"
 (
   echo @echo off
@@ -43,6 +49,12 @@ set "BASH_TARGET=%BASH_BIN%\clauder"
   echo exec node "%~dp0scripts/claude-mailbox.mjs" "$@"
 ) > "%BASH_TARGET%"
 
+set "BASH_CODEXR_TARGET=%BASH_BIN%\codexr"
+(
+  echo #!/usr/bin/env sh
+  echo exec node "%~dp0scripts/codex-remote-project.mjs" "$@"
+) > "%BASH_CODEXR_TARGET%"
+
 set "BASH_MAILBOX_TARGET=%BASH_BIN%\workflow-mailbox"
 (
   echo #!/usr/bin/env sh
@@ -68,17 +80,20 @@ set "BASH_STATUS_TARGET=%BASH_BIN%\workflow-mailbox-status"
 ) > "%BASH_STATUS_TARGET%"
 
 echo Installed: %TARGET%
+echo Installed: %CODEXR_TARGET%
 echo Installed: %MAILBOX_TARGET%
 echo Installed: %CHANNEL_TARGET%
 echo Installed: %REGISTER_TARGET%
 echo Installed: %STATUS_TARGET%
 echo Installed: %BASH_TARGET%
+echo Installed: %BASH_CODEXR_TARGET%
 echo Installed: %BASH_MAILBOX_TARGET%
 echo Installed: %BASH_CHANNEL_TARGET%
 echo Installed: %BASH_REGISTER_TARGET%
 echo Installed: %BASH_STATUS_TARGET%
 echo.
-echo Now open a new terminal and run:
+echo Now open a new terminal and run from any project:
 echo   clauder
+echo   codexr
 echo.
 if /i not "%~1"=="--quiet" pause

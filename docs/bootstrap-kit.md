@@ -67,7 +67,7 @@ The script only manages:
 
 | File | Purpose |
 |---|---|
-| `.mcp.json` | Registers the Claude mailbox wake-up channel |
+| `.mcp.json` | Optional persistent Claude mailbox wake-up channel config |
 | `.codex/config.toml` | Enables Codex hook support |
 | `.codex/hooks.json` | Registers Codex sessions with the workflow mailbox runtime |
 | `.claude/settings.local.json` | Registers Claude sessions and shows mailbox status at session start |
@@ -88,7 +88,7 @@ After adding reviewed config to the target project:
 ## Safety Rules
 
 - Do not infer the project from CWD when sending mailbox messages.
-- Run `install-clauder.cmd` once on Windows, or `./install-clauder` once in WSL, before using bootstrapped projects. The generated configs depend on `clauder` and `workflow-mailbox*` commands being on `PATH`.
+- Run `install-clauder.cmd` once on Windows, or `./install-clauder` once in WSL, before using bootstrapped projects. The installer adds `clauder`, `codexr`, and `workflow-mailbox*` commands to `PATH`.
 - Do not use raw `codex --remote` as the supported mailbox entry point; use `codexr` from the target repo.
 - Do not mutate another project's mailbox files manually.
 - Do not treat a green bootstrap check as proof that agent sessions are currently registered; use runtime doctor for live state.

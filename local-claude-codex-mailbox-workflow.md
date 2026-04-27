@@ -238,24 +238,22 @@ Current automation stance:
 - Stop can be used only as a continue-or-stop signal, not as a text injection channel
 - UserPromptSubmit mailbox injection is rejected as noisy
 - Claude Code channels are the supported autonomous wake-up path for Claude mailbox
-  automation. Project `.mcp.json` registers MCP server `workflow-mailbox`, backed by
-  the installed `workflow-mailbox-channel` command. The operator entry point is
-  `clauder`, matching the Codex-side `codexr`, and it starts from the current project
-  directory. If the PATH alias is not installed, `clauder.cmd` from the workflow repo
-  is the Windows fallback; `install-clauder.cmd` installs the permanent short Windows
-  and Git Bash commands plus the `workflow-mailbox*` service commands. The launcher starts
-  `claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto`;
-  `clauder --mode bypass` is reserved for trusted local sessions
-  that must suppress permission prompts completely. The channel declares
-  `claude/channel`, polls `agent-mailbox/to-claude/` read-only for pending
-  `project: workflow` mail, and emits `notifications/claude/channel` events. It never
-  calls `mailbox.mjs list` or writes `received_at`; Claude must still process mail with
-  the normal mailbox CLI and archive/reply in the same turn. Channel-suggested CLI
-  commands set `AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude` so missing
-  hook registration or stale Codex session bindings for the same cwd do not make
-  `to-claude` reads look like cross-agent mailbox access. The older `acceptEdits` plus
-  long `--allowedTools` launch form is not treated as zero-touch because env-prefixed
-  Bash commands can still prompt.
+  automation. `clauder` is the operator entry point, matching the Codex-side `codexr`.
+  It starts from the current project directory, ensures the user-scoped MCP server
+  `workflow-mailbox` exists, sets `WORKFLOW_MAILBOX_PROJECT=<slug>` and
+  `WORKFLOW_MAILBOX_AGENT=claude`, and launches
+  `claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto`.
+  Target projects do not need their own `.mcp.json` for Claude wake-up. If the PATH
+  alias is not installed, `clauder.cmd` from the workflow repo is the Windows fallback;
+  `install-clauder.cmd` installs the permanent short Windows and Git Bash commands plus
+  `codexr` and the `workflow-mailbox*` service commands. `clauder --mode bypass` is
+  reserved for trusted local sessions that must suppress permission prompts completely.
+  The channel declares `claude/channel`, polls `agent-mailbox/to-claude/` read-only for
+  pending mail in the current project slug, and emits `notifications/claude/channel`
+  events. It never calls `mailbox.mjs list` or writes `received_at`; Claude must still
+  process mail with the normal mailbox CLI and archive/reply in the same turn. The older
+  `acceptEdits` plus long `--allowedTools` launch form is not treated as zero-touch
+  because env-prefixed Bash commands can still prompt.
 - Claude Code plugin monitors are allowed as read-only diagnostic signal adapters. The
   local `workflow-mailbox` plugin runs `scripts/mailbox-monitor.mjs` for
   `project: workflow`, polls `to-claude/`, emits only a short
