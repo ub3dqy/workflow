@@ -50,7 +50,7 @@ Important: most existing `docs/codex-tasks/*.md` files are historical archive fr
 
 ## Dashboard Preview
 
-![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
+![Mailbox dashboard overview](./docs/assets/dashboard-overview-current.png)
 
 *Local dashboard showing project filtering, active-session/runtime state, unclaimed message index, Codex transport health, recipient inboxes, archive controls, language/theme/audio toggles, and pending-count browser indicators. Unread markers are driven by the raw mailbox frontmatter field `received_at`, not by the library's display fallback timestamp.*
 

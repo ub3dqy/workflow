@@ -50,7 +50,7 @@
 
 ## Превью Дашборда
 
-![Mailbox dashboard overview](./docs/assets/dashboard-overview.png)
+![Mailbox dashboard overview](./docs/assets/dashboard-overview-current.png)
 
 *Локальный дашборд с project filter, runtime-состоянием активных сессий, индексом незабранных писем, статусом Codex transport, inbox-колонками, архивом, переключателями языка/темы/звука и browser-индикаторами pending count. Маркер непрочитанного опирается на сырое поле frontmatter `received_at`, а не на derived display timestamp из library reader'а.*
 
