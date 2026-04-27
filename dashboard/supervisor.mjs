@@ -133,12 +133,6 @@ export function createSupervisor({
     );
   }
 
-  async function atomicWriteJson(finalPath, data) {
-    const tmpPath = `${finalPath}.tmp`;
-    await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
-    await fs.rename(tmpPath, finalPath);
-  }
-
   async function pollTick() {
     if (state.supervisorHealth.isScanning) {
       return;
@@ -203,4 +197,16 @@ export function createSupervisor({
   }
 
   return { router, start, stop, state };
+}
+
+export async function atomicWriteJson(finalPath, data) {
+  const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const tmpPath = `${finalPath}.${suffix}.tmp`;
+  try {
+    await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
+    await fs.rename(tmpPath, finalPath);
+  } catch (error) {
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }

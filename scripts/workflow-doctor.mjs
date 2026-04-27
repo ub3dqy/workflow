@@ -201,6 +201,14 @@ function newestIso(items, field) {
 async function checkCoreFiles(record) {
   const requiredFiles = [
     "dashboard/package.json",
+    ".mcp.json",
+    "clauder",
+    "clauder.cmd",
+    "install-clauder",
+    "install-clauder.cmd",
+    "start-claude-mailbox.cmd",
+    "scripts/claude-mailbox.mjs",
+    "scripts/mailbox-channel.mjs",
     "scripts/mailbox.mjs",
     "scripts/codex-remote-project.mjs",
     "AGENTS.md",
@@ -262,6 +270,28 @@ async function checkCodexLaunchers(record, options) {
     record.warn(
       "codexr_path_alias",
       "codexr not found in PATH; use node scripts/codex-remote-project.mjs"
+    );
+  }
+}
+
+async function checkClaudeLauncher(record, options) {
+  const claudePath = await findExecutable("claude");
+  if (claudePath) {
+    record.pass("claude_binary", maskPath(claudePath, options));
+  } else {
+    record.warn(
+      "claude_binary",
+      "claude not found in PATH; install Claude Code before using clauder"
+    );
+  }
+
+  const clauderPath = await findExecutable("clauder");
+  if (clauderPath) {
+    record.pass("clauder_path_alias", maskPath(clauderPath, options));
+  } else {
+    record.warn(
+      "clauder_path_alias",
+      "clauder not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
     );
   }
 }
@@ -403,6 +433,7 @@ export async function runDoctor(rawOptions = {}) {
   await checkCoreFiles(record);
   await checkDashboardDependencies(record);
   await checkCodexLaunchers(record, options);
+  await checkClaudeLauncher(record, options);
   await checkRuntimeJson(record, options);
   await checkNetwork(record, options);
 

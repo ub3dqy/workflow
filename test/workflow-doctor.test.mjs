@@ -15,6 +15,13 @@ test("workflow doctor emits machine-readable checks", async () => {
   );
   assert.ok(
     payload.checks.some(
+      (check) => check.name === "file:scripts/claude-mailbox.mjs"
+    )
+  );
+  assert.ok(payload.checks.some((check) => check.name === "claude_binary"));
+  assert.ok(payload.checks.some((check) => check.name === "clauder_path_alias"));
+  assert.ok(
+    payload.checks.some(
       (check) =>
         check.name === "dashboard_api" &&
         check.status === "skip"

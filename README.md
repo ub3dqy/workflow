@@ -81,7 +81,18 @@ start-workflow.cmd
 start-workflow-hidden.vbs
 start-workflow-codex.cmd
 start-workflow-codex-hidden.vbs
+clauder.cmd
+install-clauder.cmd
+start-claude-mailbox.cmd
 stop-workflow.cmd
+```
+
+Everyday commands after setup:
+
+```text
+Dashboard: start-workflow.cmd
+Codex:     codexr
+Claude:    clauder
 ```
 
 ### Start Codex Remote Sessions
@@ -103,6 +114,54 @@ If `codexr` is not installed on `PATH`, run the launcher directly:
 ```bash
 node scripts/codex-remote-project.mjs
 ```
+
+### Start Claude With Mailbox Wake-Up
+
+Claude Code v2.1.80+ can receive pushed mailbox events through the project MCP channel in [`.mcp.json`](./.mcp.json):
+
+If the command is not installed yet, run once:
+
+```text
+install-clauder.cmd
+```
+
+The installer adds `clauder` for both Windows shells and Git Bash (`C:\Users\<you>\bin\clauder`). If an already-open Git Bash still reports `command not found`, run `hash -r` or open a new terminal.
+
+Then start Claude with:
+
+```bash
+clauder
+```
+
+This is the Claude equivalent of `codexr`: one command opens Claude with mailbox wake-up already enabled. If `clauder` is not on `PATH` yet, run it from the repo root with:
+
+```text
+clauder.cmd
+```
+
+The launcher starts Claude from the repo root with channel `server:workflow-mailbox` and permission mode `auto`:
+
+```powershell
+claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto
+```
+
+The first launch asks you to confirm that this is a local development channel. After confirmation, `scripts/mailbox-channel.mjs` starts as the `workflow-mailbox` MCP server, polls `agent-mailbox/to-claude/` read-only, and pushes pending `project: workflow` messages into the live Claude session with `notifications/claude/channel`. Claude still uses the normal mailbox CLI when it actually picks up mail; the channel itself never calls `mailbox.mjs list` and never writes `received_at`.
+
+For a trusted local session where permission prompts must be disabled completely, use the explicit bypass mode:
+
+```bash
+clauder --mode bypass
+```
+
+The recommended mode is `auto`; use `bypass` only in this trusted local workflow repo. The older long `--allowedTools` command is not the zero-touch path because env-prefixed Bash commands can still prompt.
+
+Claude Code v2.1.105+ also supports this repo's older plugin monitor:
+
+```powershell
+claude --plugin-dir <repo-root>\claude-workflow-plugin
+```
+
+The monitor is read-only and emits a short `WORKFLOW_MAILBOX_PENDING` signal. It is useful as a diagnostic notification path, but idle CLI sessions receive monitor output during an active or next user turn; it is not a guaranteed autonomous wake-up. Use the `workflow-mailbox` channel for push into an already-running session.
 
 ### Runtime Doctor
 

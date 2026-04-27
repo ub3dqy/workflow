@@ -94,6 +94,13 @@ function detectAgentFromEnvironment(env = process.env) {
   return "";
 }
 
+function detectProjectFromEnvironment(env = process.env) {
+  return normalizeProject(
+    sanitizeString(env.MAILBOX_PROJECT) ||
+      sanitizeString(env.AGENT_MAILBOX_PROJECT)
+  );
+}
+
 async function resolveCallerSessions({ cwd, runtimeRoot }) {
   const sessionsPath = path.join(runtimeRoot, "sessions.json");
   let raw;
@@ -126,8 +133,7 @@ async function resolveCallerSessions({ cwd, runtimeRoot }) {
   const targetNormalized = path.normalize(targetHost).replace(/[\\/]+$/, "");
   // NTFS (Windows + WSL /mnt/<letter>/ mounts) is case-insensitive. Sessions
   // are registered on Windows (capital drive + mixed case), but agent cwd may
-  // arrive from WSL with lowercase drive path (`/mnt/e/project/workflow` vs
-  // the registered `/mnt/e/Project/workflow`). Case-fold both sides regardless
+  // arrive from WSL with different path casing for the same project. Case-fold both sides regardless
   // of process.platform so same-project CLI operations work across WSL ↔
   // Windows even when WSL cwd casing differs. See Codex round-4 verification.
   const caseFold = (value) => value.toLowerCase();
@@ -170,7 +176,7 @@ async function resolveCallerSessions({ cwd, runtimeRoot }) {
 
 export async function resolveCallerProject({ cwd, runtimeRoot }) {
   const [entry] = await resolveCallerSessions({ cwd, runtimeRoot });
-  return normalizeProject(entry?.project) || "";
+  return normalizeProject(entry?.project) || detectProjectFromEnvironment();
 }
 
 export async function resolveCallerAgent({ cwd, runtimeRoot }) {
@@ -178,11 +184,13 @@ export async function resolveCallerAgent({ cwd, runtimeRoot }) {
   const preferredAgent = detectAgentFromEnvironment();
 
   if (preferredAgent) {
-    return matches.some(
+    if (matches.some(
       (entry) => sanitizeAgent(entry.agent) === preferredAgent
-    )
-      ? preferredAgent
-      : "";
+    )) {
+      return preferredAgent;
+    }
+
+    return detectProjectFromEnvironment() ? preferredAgent : "";
   }
 
   const agents = new Set(

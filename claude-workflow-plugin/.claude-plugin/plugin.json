@@ -1,0 +1,12 @@
+{
+  "name": "workflow-mailbox",
+  "version": "0.1.0",
+  "description": "Starts a read-only project-scoped mailbox monitor for Claude Code sessions.",
+  "monitors": [
+    {
+      "name": "claude-mailbox",
+      "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/claude-mailbox-monitor.mjs\"",
+      "description": "Workflow mailbox notifications for Claude"
+    }
+  ]
+}

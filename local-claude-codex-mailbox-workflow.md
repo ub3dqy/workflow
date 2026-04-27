@@ -237,6 +237,31 @@ Current automation stance:
 - SessionStart is acceptable for pending-mail summary
 - Stop can be used only as a continue-or-stop signal, not as a text injection channel
 - UserPromptSubmit mailbox injection is rejected as noisy
+- Claude Code channels are the supported autonomous wake-up path for Claude mailbox
+  automation. Project `.mcp.json` registers MCP server `workflow-mailbox`, backed by
+  `scripts/mailbox-channel.mjs`. The operator entry point is
+  `clauder`, matching the Codex-side `codexr`. If the PATH alias is not installed,
+  `clauder.cmd` from the repo root is the Windows fallback; `install-clauder.cmd`
+  installs the permanent short Windows command. The launcher starts
+  `claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto`;
+  `clauder --mode bypass` is reserved for trusted local sessions
+  that must suppress permission prompts completely. The channel declares
+  `claude/channel`, polls `agent-mailbox/to-claude/` read-only for pending
+  `project: workflow` mail, and emits `notifications/claude/channel` events. It never
+  calls `mailbox.mjs list` or writes `received_at`; Claude must still process mail with
+  the normal mailbox CLI and archive/reply in the same turn. Channel-suggested CLI
+  commands set `AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude` so missing
+  hook registration or stale Codex session bindings for the same cwd do not make
+  `to-claude` reads look like cross-agent mailbox access. The older `acceptEdits` plus
+  long `--allowedTools` launch form is not treated as zero-touch because env-prefixed
+  Bash commands can still prompt.
+- Claude Code plugin monitors are allowed as read-only diagnostic signal adapters. The
+  local `workflow-mailbox` plugin runs `scripts/mailbox-monitor.mjs` for
+  `project: workflow`, polls `to-claude/`, emits only a short
+  `WORKFLOW_MAILBOX_PENDING` line, and never calls `mailbox.mjs list` or writes
+  `received_at`. In idle Claude Code CLI sessions the visible proof is `1 monitor` in
+  the status bar; monitor output is delivered to Claude during an active or next user
+  turn, not as a guaranteed autonomous wake-up.
 
 ## Chat Reporting Policy
 

@@ -85,6 +85,8 @@ function runMailbox(args, envOverrides) {
       ...process.env,
       MAILBOX_AGENT: "",
       AGENT_MAILBOX_AGENT: "",
+      MAILBOX_PROJECT: "",
+      AGENT_MAILBOX_PROJECT: "",
       CODEX_THREAD_ID: "",
       CLAUDE_PROJECT_DIR: "",
       ...envOverrides
@@ -125,4 +127,54 @@ test("ambiguous shared cwd rejects list --bucket all", async () => {
   );
 
   assert.equal(result.status, 64);
+});
+
+test("explicit mailbox project env allows channel command when runtime sessions are missing", async () => {
+  const fixture = await createFixture();
+  await fs.writeFile(path.join(fixture.runtimeRoot, "sessions.json"), "[]", "utf8");
+
+  const result = runMailbox(
+    ["list", "--bucket", "to-claude", "--project", "workflow"],
+    {
+      AGENT_MAILBOX_AGENT: "claude",
+      AGENT_MAILBOX_PROJECT: "workflow",
+      MAILBOX_ROOT: fixture.mailboxRoot,
+      RUNTIME_ROOT: fixture.runtimeRoot
+    }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(await fs.readFile(fixture.claudeMessagePath, "utf8"), /^received_at: .+/m);
+});
+
+test("explicit mailbox env supplies agent identity for unbound reply", async () => {
+  const fixture = await createFixture();
+  await fs.writeFile(path.join(fixture.runtimeRoot, "sessions.json"), "[]", "utf8");
+
+  const result = runMailbox(
+    [
+      "reply",
+      "--from",
+      "claude",
+      "--project",
+      "workflow",
+      "--to",
+      "to-claude/workflow__2026-04-23T20-10-00Z-thread-user-001.md",
+      "--body",
+      "ack"
+    ],
+    {
+      AGENT_MAILBOX_AGENT: "claude",
+      AGENT_MAILBOX_PROJECT: "workflow",
+      MAILBOX_ROOT: fixture.mailboxRoot,
+      RUNTIME_ROOT: fixture.runtimeRoot
+    }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const replies = await fs.readdir(path.join(fixture.mailboxRoot, "to-codex"));
+  assert.ok(replies.some((filename) => filename.startsWith("workflow__")));
+  await assert.rejects(fs.readFile(fixture.claudeMessagePath, "utf8"), {
+    code: "ENOENT"
+  });
 });

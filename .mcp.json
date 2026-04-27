@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "workflow-mailbox": {
+      "command": "node",
+      "args": [
+        "./scripts/mailbox-channel.mjs",
+        "--project",
+        "workflow",
+        "--agent",
+        "claude",
+        "--interval-ms",
+        "3000"
+      ]
+    }
+  }
+}
