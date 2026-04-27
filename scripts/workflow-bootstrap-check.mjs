@@ -197,8 +197,9 @@ async function checkHooks(record, options) {
 }
 
 function buildSuggestedFiles(options) {
-  const registerScript = path.join(workflowRoot, "scripts", "mailbox-session-register.mjs");
+  const codexRegisterScript = "$(git rev-parse --show-toplevel)/scripts/mailbox-session-register.mjs";
   const statusScript = path.join(workflowRoot, "scripts", "mailbox-status.mjs");
+  const registerScript = path.join(workflowRoot, "scripts", "mailbox-session-register.mjs");
 
   return {
     ".codex/config.toml": "[features]\ncodex_hooks = true\n",
@@ -211,7 +212,7 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${registerScript}" --project ${options.project} --agent codex`,
+                  command: `node "${codexRegisterScript}" --project ${options.project} --agent codex`,
                   timeout: 5
                 }
               ]
@@ -223,7 +224,7 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${registerScript}" --project ${options.project} --agent codex`,
+                  command: `node "${codexRegisterScript}" --project ${options.project} --agent codex`,
                   timeout: 5
                 }
               ]
