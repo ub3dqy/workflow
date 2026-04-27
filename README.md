@@ -125,7 +125,7 @@ If the command is not installed yet, run once:
 install-clauder.cmd
 ```
 
-The installer adds `clauder` for both Windows shells and Git Bash (`C:\Users\<you>\bin\clauder`). If an already-open Git Bash still reports `command not found`, run `hash -r` or open a new terminal.
+The installer adds `clauder` and the mailbox service commands (`workflow-mailbox*`) for Windows shells and Git Bash (`C:\Users\<you>\bin`). If an already-open Git Bash still reports `command not found`, run `hash -r` or open a new terminal.
 
 Then start Claude with:
 
@@ -139,13 +139,21 @@ This is the Claude equivalent of `codexr`: one command opens Claude with mailbox
 clauder.cmd
 ```
 
-The launcher starts Claude from the repo root with channel `server:workflow-mailbox` and permission mode `auto`:
+The launcher starts Claude from the current project directory with channel `server:workflow-mailbox` and permission mode `auto`:
 
 ```powershell
 claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto
 ```
 
-The first launch asks you to confirm that this is a local development channel. After confirmation, `scripts/mailbox-channel.mjs` starts as the `workflow-mailbox` MCP server, polls `agent-mailbox/to-claude/` read-only, and pushes pending `project: workflow` messages into the live Claude session with `notifications/claude/channel`. Claude still uses the normal mailbox CLI when it actually picks up mail; the channel itself never calls `mailbox.mjs list` and never writes `received_at`.
+The first launch asks you to confirm that this is a local development channel. After confirmation, `workflow-mailbox-channel` starts as the `workflow-mailbox` MCP server, polls the central `agent-mailbox/to-claude/` read-only, and pushes pending messages for the current project slug into the live Claude session with `notifications/claude/channel`. Claude still uses the normal mailbox CLI when it actually picks up mail; the channel itself never calls `mailbox.mjs list` and never writes `received_at`.
+
+For another project, first add the minimal config from the workflow repo:
+
+```bash
+node /path/to/workflow/scripts/bootstrap-workflow.mjs --target /path/to/other-project --project other-project --write
+```
+
+Then run `clauder` from that project directory.
 
 For a trusted local session where permission prompts must be disabled completely, use the explicit bypass mode:
 

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if command -v readlink >/dev/null 2>&1; then
+  SELF=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
+  SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+fi
+exec node "$SCRIPT_DIR/scripts/mailbox-channel.mjs" "$@"

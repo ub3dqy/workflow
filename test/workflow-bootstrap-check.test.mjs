@@ -14,5 +14,7 @@ test("workflow bootstrap check reports current repo readiness", async () => {
   assert.ok(Array.isArray(result.checks));
   assert.ok(result.checks.some((check) => check.name === "file:AGENTS.md"));
   assert.ok(result.checks.some((check) => check.name === "codex_hooks_enabled"));
+  assert.ok(result.checks.some((check) => check.name === "claude_mailbox_channel"));
   assert.ok(result.suggestedFiles[".codex/hooks.json"].includes("--project workflow"));
+  assert.ok(result.suggestedFiles[".mcp.json"].includes("workflow-mailbox-channel"));
 });

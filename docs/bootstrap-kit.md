@@ -43,6 +43,7 @@ The target project should have:
 - `.codex/config.toml` — enables Codex hooks with `codex_hooks = true`.
 - `.codex/hooks.json` — registers Codex sessions through `scripts/mailbox-session-register.mjs`.
 - `.claude/settings.local.json` — registers Claude sessions and optionally shows mailbox status at session start.
+- `.mcp.json` — registers the Claude mailbox wake-up channel through `workflow-mailbox-channel`.
 
 Do not copy `agent-mailbox/`, `mailbox-runtime/`, `.codex/sessions/`, or dashboard build output into the target repo.
 
@@ -64,6 +65,7 @@ The script only manages:
 
 | File | Purpose |
 |---|---|
+| `.mcp.json` | Registers the Claude mailbox wake-up channel |
 | `.codex/config.toml` | Enables Codex hook support |
 | `.codex/hooks.json` | Registers Codex sessions with the workflow mailbox runtime |
 | `.claude/settings.local.json` | Registers Claude sessions and shows mailbox status at session start |
@@ -77,13 +79,14 @@ This kit copies workflow primitives, not project history. Do not use it to resto
 After adding reviewed config to the target project:
 
 1. Start the workflow dashboard from this repo.
-2. Start Claude and Codex from the target repo.
+2. Start Claude and Codex from the target repo with `clauder` and `codexr`.
 3. Run `node scripts/workflow-doctor.mjs` in this repo to confirm runtime JSON and transport health.
 4. Use mailbox CLI with explicit `--project <slug>` only.
 
 ## Safety Rules
 
 - Do not infer the project from CWD when sending mailbox messages.
+- Run `install-clauder.cmd` once on Windows, or `./install-clauder` once in WSL, before using bootstrapped projects. The generated configs depend on `clauder` and `workflow-mailbox*` commands being on `PATH`.
 - Do not use raw `codex --remote` as the supported mailbox entry point; use `codexr` from the target repo.
 - Do not mutate another project's mailbox files manually.
 - Do not treat a green bootstrap check as proof that agent sessions are currently registered; use runtime doctor for live state.

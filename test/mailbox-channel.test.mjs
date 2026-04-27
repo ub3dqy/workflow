@@ -26,9 +26,9 @@ test("mailbox channel formats a workflow-safe event", () => {
   });
 
   assert.match(content, /Mailbox reminder for project workflow/);
-  assert.match(content, /AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude node scripts\/mailbox\.mjs list --bucket to-claude --project workflow/);
+  assert.match(content, /AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude workflow-mailbox list --bucket to-claude --project workflow/);
   assert.match(content, /Do not read files under agent-mailbox directly/);
-  assert.match(content, /AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude node scripts\/mailbox\.mjs archive --path <relativePath> --project workflow --resolution no-reply-needed/);
+  assert.match(content, /AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=claude workflow-mailbox archive --path <relativePath> --project workflow --resolution no-reply-needed/);
   assert.match(content, /archive or reply in the same turn/);
   assert.deepEqual(meta, {
     project: "workflow",
@@ -48,7 +48,7 @@ test("mailbox channel declares the Claude channel capability", () => {
   assert.deepEqual(result.capabilities.experimental["claude/channel"], {});
   assert.equal(result.serverInfo.name, "workflow-mailbox");
   assert.match(result.instructions, /normal mailbox CLI workflow/);
-  assert.match(result.instructions, /AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude node scripts\/mailbox\.mjs archive --path <relativePath>/);
+  assert.match(result.instructions, /AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude workflow-mailbox archive --path <relativePath>/);
 });
 
 test("mailbox channel args support environment defaults and explicit bucket", () => {

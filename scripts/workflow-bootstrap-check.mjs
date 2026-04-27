@@ -11,6 +11,7 @@ const workflowRoot = path.resolve(__dirname, "..");
 const REQUIRED_FILES = [
   "AGENTS.md",
   "CLAUDE.md",
+  ".mcp.json",
   ".codex/config.toml",
   ".codex/hooks.json",
   ".claude/settings.local.json"
@@ -148,6 +149,7 @@ async function checkFiles(record, options) {
 
 async function checkHooks(record, options) {
   const codexHooks = await readTextIfExists(path.join(options.target, ".codex/hooks.json"));
+  const mcpConfig = await readTextIfExists(path.join(options.target, ".mcp.json"));
   const claudeSettings = await readTextIfExists(
     path.join(options.target, ".claude/settings.local.json")
   );
@@ -175,6 +177,20 @@ async function checkHooks(record, options) {
     }
   }
 
+  if (mcpConfig) {
+    if (mcpConfig.includes("workflow-mailbox-channel")) {
+      record.pass("claude_mailbox_channel", "workflow-mailbox-channel referenced");
+    } else {
+      record.warn("claude_mailbox_channel", "missing workflow-mailbox-channel reference");
+    }
+
+    if (mcpConfig.includes(`--project`) && mcpConfig.includes(options.project)) {
+      record.pass("claude_channel_project_slug", options.project);
+    } else {
+      record.warn("claude_channel_project_slug", `expected project ${options.project}`);
+    }
+  }
+
   if (claudeSettings) {
     if (claudeSettings.includes("mailbox-status.mjs")) {
       record.pass("claude_mailbox_status_hook", "mailbox-status.mjs referenced");
@@ -197,12 +213,27 @@ async function checkHooks(record, options) {
 }
 
 function buildSuggestedFiles(options) {
-  const codexRegisterScript = "$(git rev-parse --show-toplevel)/scripts/mailbox-session-register.mjs";
-  const statusScript = path.join(workflowRoot, "scripts", "mailbox-status.mjs");
-  const registerScript = path.join(workflowRoot, "scripts", "mailbox-session-register.mjs");
-
   return {
     ".codex/config.toml": "[features]\ncodex_hooks = true\n",
+    ".mcp.json": JSON.stringify(
+      {
+        mcpServers: {
+          "workflow-mailbox": {
+            command: "workflow-mailbox-channel",
+            args: [
+              "--project",
+              options.project,
+              "--agent",
+              "claude",
+              "--interval-ms",
+              "3000"
+            ]
+          }
+        }
+      },
+      null,
+      2
+    ),
     ".codex/hooks.json": JSON.stringify(
       {
         hooks: {
@@ -212,7 +243,7 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${codexRegisterScript}" --project ${options.project} --agent codex`,
+                  command: `workflow-mailbox-session-register --project ${options.project} --agent codex`,
                   timeout: 5
                 }
               ]
@@ -224,7 +255,7 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${codexRegisterScript}" --project ${options.project} --agent codex`,
+                  command: `workflow-mailbox-session-register --project ${options.project} --agent codex`,
                   timeout: 5
                 }
               ]
@@ -244,12 +275,12 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${statusScript}"`,
+                  command: "workflow-mailbox-status",
                   timeout: 3
                 },
                 {
                   type: "command",
-                  command: `node "${registerScript}" --project ${options.project}`,
+                  command: `workflow-mailbox-session-register --project ${options.project}`,
                   timeout: 5
                 }
               ]
@@ -260,7 +291,7 @@ function buildSuggestedFiles(options) {
               hooks: [
                 {
                   type: "command",
-                  command: `node "${registerScript}" --project ${options.project}`,
+                  command: `workflow-mailbox-session-register --project ${options.project}`,
                   timeout: 5
                 }
               ]

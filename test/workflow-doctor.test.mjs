@@ -20,6 +20,10 @@ test("workflow doctor emits machine-readable checks", async () => {
   );
   assert.ok(payload.checks.some((check) => check.name === "claude_binary"));
   assert.ok(payload.checks.some((check) => check.name === "clauder_path_alias"));
+  assert.ok(payload.checks.some((check) => check.name === "workflow_mailbox_path_alias"));
+  assert.ok(payload.checks.some((check) => check.name === "workflow_mailbox_channel_path_alias"));
+  assert.ok(payload.checks.some((check) => check.name === "workflow_mailbox_session_register_path_alias"));
+  assert.ok(payload.checks.some((check) => check.name === "workflow_mailbox_status_path_alias"));
   assert.ok(
     payload.checks.some(
       (check) =>

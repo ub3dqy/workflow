@@ -8,8 +8,6 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, "..");
-
 export const DEFAULT_CHANNEL = "server:workflow-mailbox";
 export const DEFAULT_MODE = "auto";
 const VALID_MODES = new Set(["auto", "bypass", "manual"]);
@@ -29,7 +27,7 @@ function printHelp() {
       "                      bypass -> --dangerously-skip-permissions",
       "                      manual -> no permission-mode flag",
       "  --channel <entry>   Channel entry. Default: server:workflow-mailbox",
-      "  --cwd <path>        Project cwd. Default: repository root",
+      "  --cwd <path>        Project cwd. Default: current directory",
       "  --no-launch         Print the launch command without starting Claude",
       "  --help, -h          Show this help",
       "",
@@ -46,7 +44,7 @@ export function parseArgs(argv) {
   const args = {
     channel: DEFAULT_CHANNEL,
     mode: DEFAULT_MODE,
-    cwd: REPO_ROOT,
+    cwd: process.cwd(),
     claudeArgs: [],
     noLaunch: false,
     help: false

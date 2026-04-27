@@ -110,13 +110,14 @@ function recipientForBucket(bucketName) {
   return bucketName === "to-codex" ? "codex" : "claude";
 }
 
-function mailboxCommand(recipient, command) {
-  return `AGENT_MAILBOX_PROJECT=workflow AGENT_MAILBOX_AGENT=${recipient} node scripts/mailbox.mjs ${command}`;
+function mailboxCommand(project, recipient, command) {
+  return `AGENT_MAILBOX_PROJECT=${project} AGENT_MAILBOX_AGENT=${recipient} workflow-mailbox ${command}`;
 }
 
 export function formatChannelContent(messages, { project, bucketName }) {
   const recipient = recipientForBucket(bucketName);
   const command = mailboxCommand(
+    project,
     recipient,
     `list --bucket ${bucketName} --project ${project}`
   );
@@ -133,8 +134,8 @@ export function formatChannelContent(messages, { project, bucketName }) {
     "Use the normal mailbox workflow in this repository.",
     `First run: ${command}`,
     "Do not read files under agent-mailbox directly; the list output contains the message body.",
-    `If no response is needed, archive with: ${mailboxCommand(recipient, `archive --path <relativePath> --project ${project} --resolution no-reply-needed`)}`,
-    `If a response is needed, reply with: ${mailboxCommand(recipient, `reply --from ${recipient} --project ${project} --to <relativePath> --body "<response>"`)}`,
+    `If no response is needed, archive with: ${mailboxCommand(project, recipient, `archive --path <relativePath> --project ${project} --resolution no-reply-needed`)}`,
+    `If a response is needed, reply with: ${mailboxCommand(project, recipient, `reply --from ${recipient} --project ${project} --to <relativePath> --body "<response>"`)}`,
     "After processing, archive or reply in the same turn."
   ]
     .filter(Boolean)
@@ -178,8 +179,8 @@ export function createInitializeResult(params = {}) {
       "Mailbox reminders arrive as <channel source=\"workflow-mailbox\" ...>. " +
       "When one arrives, process it with the repository's normal mailbox CLI workflow. " +
       "Do not read mailbox files directly; run the listed mailbox.mjs list command first, use the body from list output, " +
-      "then archive with `AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude node scripts/mailbox.mjs archive --path <relativePath> --project <project> --resolution no-reply-needed` " +
-      "or reply with `AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude node scripts/mailbox.mjs reply --from claude --project <project> --to <relativePath> --body \"<response>\"` in the same turn."
+      "then archive with `AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude workflow-mailbox archive --path <relativePath> --project <project> --resolution no-reply-needed` " +
+      "or reply with `AGENT_MAILBOX_PROJECT=<project> AGENT_MAILBOX_AGENT=claude workflow-mailbox reply --from claude --project <project> --to <relativePath> --body \"<response>\"` in the same turn."
   };
 }
 

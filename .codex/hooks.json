@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/scripts/mailbox-session-register.mjs\" --project workflow --agent codex",
+            "command": "workflow-mailbox-session-register --project workflow --agent codex",
             "timeout": 5
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/scripts/mailbox-session-register.mjs\" --project workflow --agent codex",
+            "command": "workflow-mailbox-session-register --project workflow --agent codex",
             "timeout": 5
           }
         ]

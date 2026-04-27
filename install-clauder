@@ -6,6 +6,14 @@ BIN_DIR="${HOME}/.local/bin"
 
 mkdir -p "$BIN_DIR"
 ln -sf "$SCRIPT_DIR/scripts/claude-mailbox.mjs" "$BIN_DIR/clauder"
+ln -sf "$SCRIPT_DIR/workflow-mailbox" "$BIN_DIR/workflow-mailbox"
+ln -sf "$SCRIPT_DIR/workflow-mailbox-channel" "$BIN_DIR/workflow-mailbox-channel"
+ln -sf "$SCRIPT_DIR/workflow-mailbox-session-register" "$BIN_DIR/workflow-mailbox-session-register"
+ln -sf "$SCRIPT_DIR/workflow-mailbox-status" "$BIN_DIR/workflow-mailbox-status"
 
 printf 'Installed: %s/clauder\n\n' "$BIN_DIR"
+printf 'Installed: %s/workflow-mailbox\n' "$BIN_DIR"
+printf 'Installed: %s/workflow-mailbox-channel\n\n' "$BIN_DIR"
+printf 'Installed: %s/workflow-mailbox-session-register\n' "$BIN_DIR"
+printf 'Installed: %s/workflow-mailbox-status\n\n' "$BIN_DIR"
 printf 'Now open a new terminal and run:\n  clauder\n'

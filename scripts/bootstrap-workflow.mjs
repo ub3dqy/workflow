@@ -10,7 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const FILE_PURPOSES = {
   ".codex/config.toml": "Enable Codex hook support for the target project.",
   ".codex/hooks.json": "Register Codex sessions with the workflow mailbox runtime.",
-  ".claude/settings.local.json": "Register Claude sessions and show mailbox status at session start."
+  ".claude/settings.local.json": "Register Claude sessions and show mailbox status at session start.",
+  ".mcp.json": "Register the Claude mailbox wake-up channel for this project."
 };
 
 function normalizeProject(project) {

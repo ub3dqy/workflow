@@ -30,12 +30,16 @@ test("bootstrap workflow is dry-run by default and writes only on request", asyn
     [
       ".claude/settings.local.json",
       ".codex/config.toml",
-      ".codex/hooks.json"
+      ".codex/hooks.json",
+      ".mcp.json"
     ].sort()
   );
 
   const codexHooks = await fs.readFile(path.join(target, ".codex", "hooks.json"), "utf8");
   assert.match(codexHooks, /--project sample-project/);
+  const mcpConfig = await fs.readFile(path.join(target, ".mcp.json"), "utf8");
+  assert.match(mcpConfig, /workflow-mailbox-channel/);
+  assert.match(mcpConfig, /sample-project/);
 
   const noOverwrite = await buildBootstrapPlan({
     target,

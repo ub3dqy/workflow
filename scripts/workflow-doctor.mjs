@@ -207,6 +207,14 @@ async function checkCoreFiles(record) {
     "install-clauder",
     "install-clauder.cmd",
     "start-claude-mailbox.cmd",
+    "workflow-mailbox",
+    "workflow-mailbox.cmd",
+    "workflow-mailbox-channel",
+    "workflow-mailbox-channel.cmd",
+    "workflow-mailbox-session-register",
+    "workflow-mailbox-session-register.cmd",
+    "workflow-mailbox-status",
+    "workflow-mailbox-status.cmd",
     "scripts/claude-mailbox.mjs",
     "scripts/mailbox-channel.mjs",
     "scripts/mailbox.mjs",
@@ -292,6 +300,46 @@ async function checkClaudeLauncher(record, options) {
     record.warn(
       "clauder_path_alias",
       "clauder not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
+    );
+  }
+
+  const mailboxPath = await findExecutable("workflow-mailbox");
+  if (mailboxPath) {
+    record.pass("workflow_mailbox_path_alias", maskPath(mailboxPath, options));
+  } else {
+    record.warn(
+      "workflow_mailbox_path_alias",
+      "workflow-mailbox not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
+    );
+  }
+
+  const channelPath = await findExecutable("workflow-mailbox-channel");
+  if (channelPath) {
+    record.pass("workflow_mailbox_channel_path_alias", maskPath(channelPath, options));
+  } else {
+    record.warn(
+      "workflow_mailbox_channel_path_alias",
+      "workflow-mailbox-channel not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
+    );
+  }
+
+  const registerPath = await findExecutable("workflow-mailbox-session-register");
+  if (registerPath) {
+    record.pass("workflow_mailbox_session_register_path_alias", maskPath(registerPath, options));
+  } else {
+    record.warn(
+      "workflow_mailbox_session_register_path_alias",
+      "workflow-mailbox-session-register not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
+    );
+  }
+
+  const statusPath = await findExecutable("workflow-mailbox-status");
+  if (statusPath) {
+    record.pass("workflow_mailbox_status_path_alias", maskPath(statusPath, options));
+  } else {
+    record.warn(
+      "workflow_mailbox_status_path_alias",
+      "workflow-mailbox-status not found in PATH; run install-clauder.cmd on Windows or ./install-clauder in WSL"
     );
   }
 }

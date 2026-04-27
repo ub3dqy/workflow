@@ -239,10 +239,11 @@ Current automation stance:
 - UserPromptSubmit mailbox injection is rejected as noisy
 - Claude Code channels are the supported autonomous wake-up path for Claude mailbox
   automation. Project `.mcp.json` registers MCP server `workflow-mailbox`, backed by
-  `scripts/mailbox-channel.mjs`. The operator entry point is
-  `clauder`, matching the Codex-side `codexr`. If the PATH alias is not installed,
-  `clauder.cmd` from the repo root is the Windows fallback; `install-clauder.cmd`
-  installs the permanent short Windows command. The launcher starts
+  the installed `workflow-mailbox-channel` command. The operator entry point is
+  `clauder`, matching the Codex-side `codexr`, and it starts from the current project
+  directory. If the PATH alias is not installed, `clauder.cmd` from the workflow repo
+  is the Windows fallback; `install-clauder.cmd` installs the permanent short Windows
+  and Git Bash commands plus the `workflow-mailbox*` service commands. The launcher starts
   `claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto`;
   `clauder --mode bypass` is reserved for trusted local sessions
   that must suppress permission prompts completely. The channel declares
