@@ -117,7 +117,7 @@ node scripts/codex-remote-project.mjs
 
 ### Start Claude With Mailbox Wake-Up
 
-Claude Code v2.1.80+ can receive pushed mailbox events through the project MCP channel in [`.mcp.json`](./.mcp.json):
+Claude Code v2.1.80+ can receive pushed mailbox events through an MCP channel. The `clauder` launcher ensures a user-scoped `workflow-mailbox` MCP server exists, so ordinary projects do not need their own `.mcp.json` just to receive mailbox wake-ups.
 
 If the command is not installed yet, run once:
 
@@ -139,7 +139,7 @@ This is the Claude equivalent of `codexr`: one command opens Claude with mailbox
 clauder.cmd
 ```
 
-The launcher starts Claude from the current project directory with channel `server:workflow-mailbox` and permission mode `auto`:
+The launcher starts Claude from the current project directory with channel `server:workflow-mailbox`, permission mode `auto`, and environment variables that tell the user-scoped MCP server which project slug to poll:
 
 ```powershell
 claude --dangerously-load-development-channels server:workflow-mailbox --permission-mode auto
@@ -147,13 +147,13 @@ claude --dangerously-load-development-channels server:workflow-mailbox --permiss
 
 The first launch asks you to confirm that this is a local development channel. After confirmation, `workflow-mailbox-channel` starts as the `workflow-mailbox` MCP server, polls the central `agent-mailbox/to-claude/` read-only, and pushes pending messages for the current project slug into the live Claude session with `notifications/claude/channel`. Claude still uses the normal mailbox CLI when it actually picks up mail; the channel itself never calls `mailbox.mjs list` and never writes `received_at`.
 
-For another project, first add the minimal config from the workflow repo:
+For another project, just run `clauder` from that project directory. The launcher auto-detects the project slug from existing workflow config if present, otherwise from the folder name with spaces converted to dashes. If you need a specific mailbox slug, pass it explicitly:
 
 ```bash
-node /path/to/workflow/scripts/bootstrap-workflow.mjs --target /path/to/other-project --project other-project --write
+clauder --project other-project
 ```
 
-Then run `clauder` from that project directory.
+Use `bootstrap-workflow.mjs` only when that project also needs persistent Codex hooks or checked-in workflow config.
 
 For a trusted local session where permission prompts must be disabled completely, use the explicit bypass mode:
 

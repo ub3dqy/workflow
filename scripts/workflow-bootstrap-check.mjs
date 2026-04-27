@@ -110,11 +110,22 @@ async function exists(filePath) {
   }
 }
 
+async function statIfExists(filePath) {
+  try {
+    return await fs.stat(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    if (error?.code === "ENOTDIR") return null;
+    throw error;
+  }
+}
+
 async function readTextIfExists(filePath) {
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return "";
+    if (error?.code === "ENOTDIR") return "";
     throw error;
   }
 }
@@ -139,10 +150,24 @@ async function checkTarget(record, options) {
 async function checkFiles(record, options) {
   for (const relativePath of REQUIRED_FILES) {
     const filePath = path.join(options.target, relativePath);
-    if (await exists(filePath)) {
+    const stats = await statIfExists(filePath);
+    if (stats?.isFile()) {
       record.pass(`file:${relativePath}`, "present");
+    } else if (stats) {
+      record.warn(`file:${relativePath}`, "exists but is not a file");
     } else {
       record.warn(`file:${relativePath}`, "missing");
+    }
+  }
+
+  for (const relativePath of [".codex", ".claude"]) {
+    const filePath = path.join(options.target, relativePath);
+    const stats = await statIfExists(filePath);
+    if (!stats) continue;
+    if (stats.isDirectory()) {
+      record.pass(`dir:${relativePath}`, "present");
+    } else {
+      record.warn(`dir:${relativePath}`, "exists but is not a directory");
     }
   }
 }
@@ -219,6 +244,7 @@ function buildSuggestedFiles(options) {
       {
         mcpServers: {
           "workflow-mailbox": {
+            type: "stdio",
             command: "workflow-mailbox-channel",
             args: [
               "--project",

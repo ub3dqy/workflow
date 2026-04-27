@@ -64,3 +64,14 @@ test("mailbox channel args support environment defaults and explicit bucket", ()
   assert.equal(options.intervalMs, 1000);
   assert.equal(options.mailboxRoot, "/tmp/workflow-mailbox");
 });
+
+test("mailbox channel args fall back to cwd project slug", () => {
+  const cwd = process.cwd();
+  try {
+    process.chdir("/tmp");
+    const options = parseChannelArgs([], {});
+    assert.equal(options.project, "tmp");
+  } finally {
+    process.chdir(cwd);
+  }
+});

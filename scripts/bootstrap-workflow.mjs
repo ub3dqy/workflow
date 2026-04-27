@@ -69,13 +69,30 @@ function parseArgs(argv) {
   return options;
 }
 
-async function exists(filePath) {
+async function statIfExists(filePath) {
   try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
+    return await fs.stat(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    if (error?.code === "ENOTDIR") return null;
+    throw error;
   }
+}
+
+async function findBlockingParent(basePath, targetPath) {
+  const relativeTarget = path.relative(basePath, targetPath);
+  const parts = relativeTarget.split(path.sep).filter(Boolean);
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const candidate = path.join(basePath, ...parts.slice(0, index + 1));
+    const stats = await statIfExists(candidate);
+    if (stats && !stats.isDirectory()) {
+      return {
+        relativePath: path.relative(basePath, candidate),
+        targetPath: candidate
+      };
+    }
+  }
+  return null;
 }
 
 export async function buildBootstrapPlan(rawOptions = {}) {
@@ -101,14 +118,23 @@ export async function buildBootstrapPlan(rawOptions = {}) {
       purpose: FILE_PURPOSES[relativePath] || "Workflow bootstrap file.",
       body,
       exists: false,
-      action: "pending"
+      action: "pending",
+      blockedBy: ""
     };
   });
 
   for (const file of files) {
-    file.exists = await exists(file.targetPath);
+    const blockingParent = await findBlockingParent(options.target, file.targetPath);
+    const stats = await statIfExists(file.targetPath);
+    file.exists = Boolean(stats);
+
     if (!check.ok) {
       file.action = "blocked";
+    } else if (blockingParent) {
+      file.action = "blocked_parent";
+      file.blockedBy = blockingParent.relativePath;
+    } else if (stats && !stats.isFile()) {
+      file.action = "blocked_existing_path";
     } else if (file.exists && !options.force) {
       file.action = "skip_exists";
     } else {
@@ -155,6 +181,9 @@ function renderText(plan, written = []) {
       `- ${file.relativePath}: ${file.action}`,
       `  purpose: ${file.purpose}`
     );
+    if (file.blockedBy) {
+      lines.push(`  blocked_by: ${file.blockedBy}`);
+    }
   }
 
   if (written.length > 0) {

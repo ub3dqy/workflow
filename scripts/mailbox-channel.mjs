@@ -17,6 +17,10 @@ function normalizeProject(value) {
   return typeof value === "string" ? value.trim().replace(/^['"]|['"]$/g, "") : "";
 }
 
+function projectFromCwd(cwd = process.cwd()) {
+  return normalizeProject(path.basename(path.resolve(cwd)).replace(/\s+/g, "-"));
+}
+
 function normalizeAgent(value) {
   const agent = typeof value === "string" ? value.trim().toLowerCase() : "";
   return agent === "claude" || agent === "codex" ? agent : "";
@@ -35,7 +39,10 @@ function clampInterval(value) {
 export function parseChannelArgs(argv, env = process.env) {
   const agentFromEnv = normalizeAgent(env.WORKFLOW_MAILBOX_AGENT);
   const options = {
-    project: normalizeProject(env.WORKFLOW_MAILBOX_PROJECT),
+    project:
+      normalizeProject(env.WORKFLOW_MAILBOX_PROJECT) ||
+      normalizeProject(env.AGENT_MAILBOX_PROJECT) ||
+      projectFromCwd(),
     agent: agentFromEnv || "claude",
     bucketName: "",
     intervalMs: clampInterval(env.WORKFLOW_MAILBOX_INTERVAL_MS),
@@ -321,7 +328,7 @@ async function main() {
     return;
   }
   if (!options.project) {
-    throw new Error("--project is required");
+    throw new Error("--project is required or cwd must have a usable basename");
   }
   await runChannelServer(options);
 }

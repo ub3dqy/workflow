@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -27,6 +27,7 @@ function printHelp() {
       "                      bypass -> --dangerously-skip-permissions",
       "                      manual -> no permission-mode flag",
       "  --channel <entry>   Channel entry. Default: server:workflow-mailbox",
+      "  --project <slug>    Mailbox project slug. Default: auto-detect from config or cwd",
       "  --cwd <path>        Project cwd. Default: current directory",
       "  --no-launch         Print the launch command without starting Claude",
       "  --help, -h          Show this help",
@@ -44,6 +45,7 @@ export function parseArgs(argv) {
   const args = {
     channel: DEFAULT_CHANNEL,
     mode: DEFAULT_MODE,
+    project: "",
     cwd: process.cwd(),
     claudeArgs: [],
     noLaunch: false,
@@ -70,6 +72,11 @@ export function parseArgs(argv) {
         args.channel = next;
         index += 1;
         break;
+      case "--project":
+        if (!next) throw new Error("--project requires a value");
+        args.project = next;
+        index += 1;
+        break;
       case "--cwd":
         if (!next) throw new Error("--cwd requires a value");
         args.cwd = next;
@@ -89,6 +96,7 @@ export function parseArgs(argv) {
 
   args.mode = String(args.mode || "").trim();
   args.channel = String(args.channel || "").trim();
+  args.project = normalizeProject(args.project);
   args.cwd = path.resolve(args.cwd);
 
   if (!VALID_MODES.has(args.mode)) {
@@ -99,6 +107,109 @@ export function parseArgs(argv) {
   }
 
   return args;
+}
+
+function normalizeProject(value) {
+  const next = typeof value === "string" ? value.trim().replace(/^['"]|['"]$/g, "") : "";
+  if (next.includes("__")) {
+    throw new Error('project slug must not contain "__"');
+  }
+  return next;
+}
+
+function projectFromArgList(args) {
+  if (!Array.isArray(args)) return "";
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === "--project" && typeof args[index + 1] === "string") {
+      return normalizeProject(args[index + 1]);
+    }
+    if (typeof value === "string" && value.startsWith("--project=")) {
+      return normalizeProject(value.slice("--project=".length));
+    }
+  }
+  return "";
+}
+
+function projectFromMcpConfig(cwd) {
+  const mcpPath = path.join(cwd, ".mcp.json");
+  if (!fs.existsSync(mcpPath)) return "";
+
+  try {
+    const config = JSON.parse(fs.readFileSync(mcpPath, "utf8"));
+    return projectFromArgList(config?.mcpServers?.["workflow-mailbox"]?.args);
+  } catch {
+    return "";
+  }
+}
+
+function projectFromSettings(cwd) {
+  for (const relativePath of [
+    ".claude/settings.local.json",
+    ".codex/hooks.json"
+  ]) {
+    const filePath = path.join(cwd, relativePath);
+    if (!fs.existsSync(filePath)) continue;
+    const text = fs.readFileSync(filePath, "utf8");
+    const match = text.match(/--project(?:=|\s+)(["']?)([^"'\s]+)\1/u);
+    if (match?.[2]) {
+      return normalizeProject(match[2]);
+    }
+  }
+  return "";
+}
+
+function projectFromCwd(cwd) {
+  return normalizeProject(path.basename(cwd).replace(/\s+/g, "-"));
+}
+
+export function detectProject({ cwd, project = "" }, env = process.env) {
+  return (
+    normalizeProject(project) ||
+    normalizeProject(env.WORKFLOW_MAILBOX_PROJECT) ||
+    normalizeProject(env.AGENT_MAILBOX_PROJECT) ||
+    projectFromMcpConfig(cwd) ||
+    projectFromSettings(cwd) ||
+    projectFromCwd(cwd)
+  );
+}
+
+function channelArgs(project) {
+  const args = [];
+  if (project) {
+    args.push("--project", project);
+  }
+  args.push(
+    "--agent",
+    "claude",
+    "--interval-ms",
+    "3000"
+  );
+  return args;
+}
+
+function buildMailboxServerConfig(project, platform = process.platform) {
+  if (platform === "win32") {
+    return {
+      type: "stdio",
+      command: "cmd",
+      args: ["/c", "workflow-mailbox-channel.cmd", ...channelArgs(project)]
+    };
+  }
+
+  return {
+    type: "stdio",
+    command: "workflow-mailbox-channel",
+    args: channelArgs(project)
+  };
+}
+
+export function buildMcpConfig(project = "", platform = process.platform) {
+  return {
+    mcpServers: {
+      "workflow-mailbox": buildMailboxServerConfig(project, platform)
+    }
+  };
 }
 
 function shellQuote(value) {
@@ -135,29 +246,63 @@ function buildWindowsCommandLine(command, args) {
   return [command, ...args].map(windowsQuote).join(" ");
 }
 
-function verifyProjectConfig(cwd, channel) {
-  const mcpPath = path.join(cwd, ".mcp.json");
-  if (!fs.existsSync(mcpPath)) {
-    throw new Error(`missing .mcp.json in ${cwd}`);
+function runClaudeCli(args, cwd) {
+  if (process.platform === "win32") {
+    return spawnSync(
+      process.env.ComSpec || "cmd.exe",
+      ["/d", "/s", "/c", buildWindowsCommandLine("claude", args)],
+      { cwd, encoding: "utf8" }
+    );
   }
 
-  let config;
-  try {
-    config = JSON.parse(fs.readFileSync(mcpPath, "utf8"));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`invalid .mcp.json: ${message}`);
-  }
+  return spawnSync("claude", args, { cwd, encoding: "utf8" });
+}
 
-  const serverName = channel.startsWith("server:")
-    ? channel.slice("server:".length)
-    : "";
-  if (serverName && !config?.mcpServers?.[serverName]) {
-    throw new Error(`.mcp.json does not define MCP server ${serverName}`);
+function addUserMcpServer(cwd) {
+  const commandArgs = process.platform === "win32"
+    ? ["--", "cmd", "/c", "workflow-mailbox-channel.cmd"]
+    : ["--", "workflow-mailbox-channel"];
+  const result = runClaudeCli(
+    [
+      "mcp",
+      "add",
+      "--scope",
+      "user",
+      "workflow-mailbox",
+      ...commandArgs
+    ],
+    cwd
+  );
+
+  if (result.status !== 0) {
+    const details = `${result.stderr || ""}${result.stdout || ""}`.trim();
+    throw new Error(
+      `failed to register user-scope workflow-mailbox MCP server${details ? `: ${details}` : ""}`
+    );
   }
 }
 
-async function launchClaude(command, args, cwd) {
+export function ensureUserMcpServer(cwd) {
+  const existing = runClaudeCli(["mcp", "get", "workflow-mailbox"], cwd);
+  if (existing.status === 0) {
+    return "existing";
+  }
+
+  addUserMcpServer(cwd);
+  return "created";
+}
+
+function launchEnvironment(project) {
+  return {
+    ...process.env,
+    WORKFLOW_MAILBOX_AGENT: "claude",
+    WORKFLOW_MAILBOX_PROJECT: project,
+    AGENT_MAILBOX_PROJECT: project,
+    AGENT_MAILBOX_AGENT: "claude"
+  };
+}
+
+async function launchClaude(command, args, cwd, env) {
   const spawnCommand = process.platform === "win32"
     ? process.env.ComSpec || "cmd.exe"
     : command;
@@ -166,6 +311,7 @@ async function launchClaude(command, args, cwd) {
     : args;
   const child = spawn(spawnCommand, spawnArgs, {
     cwd,
+    env,
     stdio: "inherit"
   });
 
@@ -190,7 +336,7 @@ async function main() {
     return;
   }
 
-  verifyProjectConfig(args.cwd, args.channel);
+  args.project = detectProject(args);
   const claudeArgs = buildClaudeArgs(args);
   const command = formatCommand("claude", claudeArgs);
 
@@ -199,8 +345,14 @@ async function main() {
       `${JSON.stringify(
         {
           cwd: args.cwd,
+          project: args.project,
+          ensureUserMcp: true,
           channel: args.channel,
           mode: args.mode,
+          env: {
+            WORKFLOW_MAILBOX_PROJECT: args.project,
+            WORKFLOW_MAILBOX_AGENT: "claude"
+          },
           command
         },
         null,
@@ -211,8 +363,11 @@ async function main() {
   }
 
   process.stderr.write(`[claude-mailbox] cwd: ${args.cwd}\n`);
+  process.stderr.write(`[claude-mailbox] project: ${args.project}\n`);
   process.stderr.write(`[claude-mailbox] mode: ${args.mode}\n`);
-  await launchClaude("claude", claudeArgs, args.cwd);
+  const ensureStatus = ensureUserMcpServer(args.cwd);
+  process.stderr.write(`[claude-mailbox] user MCP: ${ensureStatus}\n`);
+  await launchClaude("claude", claudeArgs, args.cwd, launchEnvironment(args.project));
 }
 
 export function isMainModule(argvPath = process.argv[1]) {
@@ -232,7 +387,7 @@ if (isMainModule()) {
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`[claude-mailbox] ${message}\n`);
-    process.stderr.write("[claude-mailbox] Check that Claude Code is installed and .mcp.json is present.\n");
+    process.stderr.write("[claude-mailbox] Check that Claude Code and workflow-mailbox-channel are on PATH.\n");
     process.exitCode = 1;
   });
 }

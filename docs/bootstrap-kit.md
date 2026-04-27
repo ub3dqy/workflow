@@ -1,6 +1,8 @@
 # Workflow Bootstrap Kit
 
-Use this kit to prepare another local project for the Claude↔Codex mailbox workflow without copying hidden state or guessing project identity.
+Use this kit to prepare another local project for the full Claude↔Codex mailbox workflow without copying hidden state or guessing project identity.
+
+For Claude wake-up only, no target-project bootstrap is required: install `clauder` once, then run `clauder` from the project directory. The launcher ensures a user-scoped `workflow-mailbox` MCP server exists and auto-detects the project slug.
 
 ## Contract
 
@@ -43,7 +45,7 @@ The target project should have:
 - `.codex/config.toml` — enables Codex hooks with `codex_hooks = true`.
 - `.codex/hooks.json` — registers Codex sessions through `scripts/mailbox-session-register.mjs`.
 - `.claude/settings.local.json` — registers Claude sessions and optionally shows mailbox status at session start.
-- `.mcp.json` — registers the Claude mailbox wake-up channel through `workflow-mailbox-channel`.
+- `.mcp.json` — optional persistent Claude mailbox wake-up channel config. `clauder` normally uses a user-scoped MCP server instead.
 
 Do not copy `agent-mailbox/`, `mailbox-runtime/`, `.codex/sessions/`, or dashboard build output into the target repo.
 
@@ -79,7 +81,7 @@ This kit copies workflow primitives, not project history. Do not use it to resto
 After adding reviewed config to the target project:
 
 1. Start the workflow dashboard from this repo.
-2. Start Claude and Codex from the target repo with `clauder` and `codexr`.
+2. Start Claude and Codex from the target repo with `clauder` and `codexr`. For Claude-only wake-up, `clauder` works without the target `.mcp.json`.
 3. Run `node scripts/workflow-doctor.mjs` in this repo to confirm runtime JSON and transport health.
 4. Use mailbox CLI with explicit `--project <slug>` only.
 

@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "workflow-mailbox": {
+      "type": "stdio",
       "command": "workflow-mailbox-channel",
       "args": [
         "--project",
